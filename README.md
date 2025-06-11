@@ -1,13 +1,77 @@
-# Authorization Server
+# FFV Traceability Auth Server
 
-## 启动服务器
+基于Spring Authorization Server的独立认证授权服务
+
+## 项目说明
+
+本项目已从原父项目中独立出来，现在是一个完全独立的Spring Boot应用程序。
+
+### 主要特性
+
+- 🔐 **多种认证方式**: 用户名/密码、短信验证码、微信登录
+- 🌐 **跨域支持**: 支持前后端分离架构
+- 🔄 **双模式认证**: 支持传统Session和JWT Token两种认证模式
+- 📱 **移动端适配**: 支持微信小程序登录
+- 🛡️ **安全加固**: CORS配置、CSRF防护、JWT安全管理
+
+### 技术栈
+
+- **Java**: 17
+- **Spring Boot**: 3.2.0
+- **Spring Security**: 6.2.0
+- **Spring Authorization Server**: 最新版本
+- **Database**: PostgreSQL
+
+## 快速开始
+
+### 环境要求
+
+- JDK 17+
+- Maven 3.6+
+- PostgreSQL 12+
+
+### 启动服务器
 
 ```bash
-cd ffvtraceability-auth-server
+# 方式1: 使用启动脚本（推荐）
+./start.sh
+
+# 方式2: 使用Maven Wrapper
+./mvnw clean spring-boot:run
+
+# 方式3: 使用本地Maven
 mvn clean spring-boot:run
+
+# 方式4: 构建后运行
+./mvnw clean package
+java -jar target/ffvtraceability-auth-server-1.0.0-SNAPSHOT.jar
 ```
 
 服务器将在 9000 端口启动。
+
+### 认证模式配置
+
+项目支持两种认证模式：
+
+#### Session模式（默认）
+```bash
+# 使用启动脚本
+./start.sh
+
+# 或直接使用Maven
+./mvnw spring-boot:run
+# 或显式指定
+AUTH_MODE=session ./start.sh
+```
+
+#### JWT模式（跨域认证）
+```bash
+# 使用启动脚本
+AUTH_MODE=jwt ./start.sh
+
+# 或直接使用Maven
+AUTH_MODE=jwt ./mvnw spring-boot:run
+```
 
 
 ## 在 Auth Server 测试页面上测试 OAuth 2.0 授权码流程

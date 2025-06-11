@@ -3,13 +3,35 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+    
     <parent>
-        <groupId>dddml.ffvtraceability</groupId>
-        <artifactId>ffvtraceability-parent</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.0</version>
+        <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
+    <groupId>org.dddml.ffvtraceability</groupId>
     <artifactId>ffvtraceability-auth-server</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <name>FFV Traceability Auth Server</name>
+    <description>Spring Authorization Server for FFV Traceability System</description>
+    
+    <properties>
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring-security.version>6.2.0</spring-security.version>
+        <spring-authorization-server.version>1.5.0</spring-authorization-server.version>
+        <postgresql.version>42.7.6</postgresql.version>
+        <weixin-java.version>4.7.0</weixin-java.version>
+        <aliyun-sdk.version>4.6.3</aliyun-sdk.version>
+        <volcengine-sdk.version>1.0.222</volcengine-sdk.version>
+        <commons-csv.version>1.10.0</commons-csv.version>
+        <hibernate-validator.version>8.0.1.Final</hibernate-validator.version>
+        <httpclient.version>4.5.14</httpclient.version>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -27,6 +49,7 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-oauth2-authorization-server</artifactId>
+            <version>${spring-authorization-server.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -35,6 +58,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
+            <version>${postgresql.version}</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
@@ -48,7 +72,7 @@
         <dependency>
             <groupId>org.hibernate.validator</groupId>
             <artifactId>hibernate-validator</artifactId>
-            <version>7.0.5.Final</version> <!-- 确保使用与 Spring Boot 兼容的版本 -->
+            <version>${hibernate-validator.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -70,14 +94,14 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
-            <version>1.10.0</version>
+            <version>${commons-csv.version}</version>
         </dependency>
         
         <!-- WeChat Login Support -->
         <dependency>
             <groupId>com.github.binarywang</groupId>
             <artifactId>weixin-java-miniapp</artifactId>
-            <version>4.7.0</version>
+            <version>${weixin-java.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.google.code.gson</groupId>
@@ -89,14 +113,14 @@
         <dependency>
             <groupId>com.github.binarywang</groupId>
             <artifactId>weixin-java-common</artifactId>
-            <version>4.7.0</version>
+            <version>${weixin-java.version}</version>
         </dependency>
         
         <!-- SMS Service Support -->
         <dependency>
             <groupId>com.aliyun</groupId>
             <artifactId>aliyun-java-sdk-core</artifactId>
-            <version>4.6.3</version>
+            <version>${aliyun-sdk.version}</version>
         </dependency>
         <dependency>
             <groupId>com.aliyun</groupId>
@@ -108,7 +132,7 @@
         <dependency>
             <groupId>com.volcengine</groupId>
             <artifactId>volc-sdk-java</artifactId>
-            <version>1.0.222</version>
+            <version>${volcengine-sdk.version}</version>
         </dependency>
         
         <!-- Spring Cache -->
@@ -117,12 +141,7 @@
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
 
-        <!-- Aliyun SMS SDK -->
-        <dependency>
-            <groupId>com.aliyun</groupId>
-            <artifactId>aliyun-java-sdk-core</artifactId>
-            <version>4.6.0</version>
-        </dependency>
+
         
         <!-- JSON and HTTP Client dependencies -->
         <dependency>
@@ -132,7 +151,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.5.13</version>
+            <version>${httpclient.version}</version>
         </dependency>
     </dependencies>
 

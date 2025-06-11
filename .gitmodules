@@ -1,0 +1,3 @@
+[submodule "reference-submodules/spring-authorization-server"]
+	path = reference-submodules/spring-authorization-server
+	url = https://github.com/spring-projects/spring-authorization-server.git
