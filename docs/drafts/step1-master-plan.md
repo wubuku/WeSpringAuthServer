@@ -52,22 +52,29 @@ private OAuth2TokenGenerator<?> tokenGenerator() {
 }
 ```
 
-## 📂 实施内容（修正版）
+## 📂 实施内容（基于实际代码分析修正）
 
 ### 核心改进项目
 
-#### 1. Token时间配置优化（修改）
+#### 1. Token时间配置优化（修改现有数据库记录）
 **目标**：调整为无状态友好的token时间配置
+
+**当前状态**（基于`src/main/resources/data.sql`第120-144行）：
 ```sql
--- 修改 src/main/resources/data.sql 中的客户端配置
+-- 当前配置
+"settings.token.access-token-time-to-live":["java.time.Duration",3600.000000000],     -- 1小时
+"settings.token.refresh-token-time-to-live":["java.time.Duration",86400.000000000],   -- 24小时
+```
+
+**修改方案**：
+```sql
+-- 需要在data.sql中更新
 UPDATE oauth2_registered_client 
-SET token_settings = '{
-    "@class":"java.util.Collections$UnmodifiableMap",
+SET token_settings = '{"@class":"java.util.Collections$UnmodifiableMap",
     "settings.token.reuse-refresh-tokens":true,
     "settings.token.access-token-time-to-live":["java.time.Duration",900.000000000],
     "settings.token.refresh-token-time-to-live":["java.time.Duration",2592000.000000000],
-    "settings.token.authorization-code-time-to-live":["java.time.Duration",600.000000000]
-}'
+    "settings.token.authorization-code-time-to-live":["java.time.Duration",600.000000000]}'
 WHERE client_id = 'ffv-client';
 ```
 
@@ -75,44 +82,17 @@ WHERE client_id = 'ffv-client';
 - Access Token：1小时 → 15分钟（提高安全性）
 - Refresh Token：24小时 → 30天（改善用户体验）
 
-#### 2. 前端友好的认证端点（新建）
-**目标**：为SPA和移动端提供简化的认证接口
-
-**WebTokenController.java**（已有，需要增强）
-```java
-@RestController
-@RequestMapping("/web-clients/oauth2")
-public class WebTokenController {
-    
-    // 已有的token端点，增强返回信息
-    @PostMapping("/token")
-    public ResponseEntity<String> getToken(
-        @RequestParam String code,
-        @RequestParam String redirectUri, 
-        @RequestParam String clientId,
-        @RequestParam String codeVerifier,
-        HttpServletRequest request) {
-        // 现有逻辑 + 增强token信息返回
-    }
-    
-    // 新增：直接用户名密码认证（可选）
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        // 为SPA提供直接认证接口
-    }
-    
-    // 新增：Token刷新端点
-    @PostMapping("/refresh")  
-    public ResponseEntity<?> refresh(@RequestBody RefreshRequest request) {
-        // 统一的token刷新接口
-    }
-}
-```
-
-#### 3. JWT权限增强（修改现有）
+#### 2. JWT权限增强（修改现有AuthorizationServerConfig.java）
 **目标**：增强现有JWT中的权限信息
+
+**当前状态**（基于`src/main/java/org/dddml/ffvtraceability/auth/config/AuthorizationServerConfig.java`第113-151行）：
+- ✅ 已有JWT生成器配置
+- ✅ 已有基础的authorities claim
+- ⚠️ 需要增强：添加user_id、client_id等信息
+
+**修改方案**：
 ```java
-// 修改 AuthorizationServerConfig.java 中的 tokenGenerator()
+// 修改 AuthorizationServerConfig.java 中的 tokenGenerator() 方法
 jwtGenerator.setJwtCustomizer(context -> {
     if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
         JwtClaimsSet.Builder claims = context.getClaims();
@@ -123,8 +103,8 @@ jwtGenerator.setJwtCustomizer(context -> {
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toSet());
         claims.claim("authorities", authorities);
-        claims.claim("user_id", authentication.getName());
-        claims.claim("client_id", context.getRegisteredClient().getClientId());
+        claims.claim("user_id", authentication.getName()); // 新增
+        claims.claim("client_id", context.getRegisteredClient().getClientId()); // 新增
         
         // 从 Authentication details 中获取更多信息
         Object details = authentication.getDetails();
@@ -134,16 +114,62 @@ jwtGenerator.setJwtCustomizer(context -> {
             if (detailsMap.containsKey("groups")) {
                 claims.claim("groups", detailsMap.get("groups"));
             }
-            if (detailsMap.containsKey("tenant")) {
-                claims.claim("tenant", detailsMap.get("tenant"));
-            }
+            // 可根据需要添加更多claims
         }
     }
 });
 ```
 
-#### 4. 配置文件调整（修改）
-**application.yml** - 添加前端友好配置
+#### 3. 前端友好的认证端点（增强现有WebTokenController.java）
+**目标**：为SPA和移动端提供简化的认证接口
+
+**当前状态**（基于`src/main/java/org/dddml/ffvtraceability/auth/controller/WebTokenController.java`）：
+- ✅ 已有`/web-clients/oauth2/token`端点
+- ⚠️ 需要增强：返回更多用户信息
+- 🆕 新增：直接认证和刷新端点
+
+**增强方案**：
+```java
+@RestController
+@RequestMapping("/web-clients/oauth2")
+public class WebTokenController {
+    
+    // 增强现有的token端点
+    @PostMapping("/token")
+    public ResponseEntity<Map<String, Object>> getToken(
+        @RequestParam("client_id") String clientId,
+        @RequestParam("code") String code,
+        @RequestParam("code_verifier") String codeVerifier,
+        @RequestParam("redirect_uri") String redirectUri,
+        HttpServletRequest request) {
+        
+        // 现有逻辑 + 增强返回信息
+        ResponseEntity<String> response = // 现有逻辑...
+        
+        // 解析JWT并返回增强信息
+        Map<String, Object> enhancedResponse = enhanceTokenResponse(response.getBody());
+        return ResponseEntity.ok(enhancedResponse);
+    }
+    
+    // 新增：用户信息查询端点
+    @GetMapping("/userinfo")
+    public ResponseEntity<?> getUserInfo(HttpServletRequest request) {
+        // 从JWT中提取用户信息并返回
+    }
+    
+    // 新增：Token刷新端点
+    @PostMapping("/refresh")  
+    public ResponseEntity<?> refresh(@RequestBody RefreshRequest request) {
+        // 统一的token刷新接口
+    }
+}
+```
+
+#### 4. 配置文件调整（修改application.yml）
+**目标**：添加前端友好配置支持
+
+**当前状态**：基础OAuth2配置
+**新增配置**：
 ```yaml
 # 现有配置保持不变，新增：
 auth-server:
@@ -155,25 +181,25 @@ auth-server:
     enhanced-claims: true  # 是否在JWT中包含增强的权限信息
 ```
 
-### 实施优先级
+### 实施优先级（基于实际情况）
 
 #### 优先级1：Token配置优化（1天）
-- 修改data.sql中的token时间配置
-- 验证新配置的生效情况
-- 测试access token和refresh token的新时间
+- 修改`src/main/resources/data.sql`中的token时间配置
+- 重启应用验证新配置的生效情况
+- 测试access token（15分钟）和refresh token（30天）的新时间
 
-#### 优先级2：前端认证端点增强（2-3天） 
-- 增强现有WebTokenController
-- 添加login和refresh端点
-- 实现统一的错误处理
+#### 优先级2：JWT权限增强（1天）
+- 修改`AuthorizationServerConfig.java`中的`tokenGenerator()`方法
+- 增加user_id、client_id等claims
+- 验证JWT payload内容包含增强信息
 
-#### 优先级3：JWT权限增强（1天）
-- 修改tokenGenerator增加权限信息
-- 验证JWT payload内容
-- 测试权限验证逻辑
+#### 优先级3：前端认证端点增强（2-3天） 
+- 增强现有`WebTokenController`的`/token`端点
+- 添加`/userinfo`和`/refresh`端点
+- 实现统一的错误处理和增强的响应格式
 
 #### 优先级4：配置和文档（1天）
-- 更新配置文件
+- 更新`application.yml`配置文件
 - 编写API文档
 - 准备前端集成指南
 
@@ -182,38 +208,70 @@ auth-server:
 ### 验证重点调整
 
 #### 1. 现有OAuth2流程验证
-- ✅ 确保现有授权码流程完全正常
-- ✅ 验证JWT access token的生成和验证
+- ✅ 确保现有授权码流程（`http://localhost:9000/oauth2/authorize`）完全正常
+- ✅ 验证JWT access token的生成和验证（已经是JWT格式）
 - ✅ 确认refresh token的工作机制
 
-#### 2. 新增端点验证
-- 🆕 测试增强的WebTokenController端点
-- 🆕 验证前端友好的认证接口
-- 🆕 测试新的token刷新机制
+#### 2. Token配置验证
+- 📝 验证新的token时间配置生效
+- 📝 测试15分钟access token过期行为
+- 📝 测试30天refresh token的持久性
 
-#### 3. Token配置验证
-- 📝 验证新的token时间配置
-- 📝 测试用户体验改善情况
-- 📝 确认安全性未降低
+#### 3. JWT增强验证
+- 🆕 验证JWT中包含user_id、client_id等新claims
+- 🆕 测试权限信息在JWT中的正确性
+- 🆕 确认JWT结构满足前端需求
+
+#### 4. 新增端点验证
+- 🆕 测试增强的`/web-clients/oauth2/token`端点
+- 🆕 验证新的`/userinfo`和`/refresh`端点
+- 🆕 测试CORS配置和前端集成
 
 ### 快速验证脚本
 ```bash
-# 基于现有scripts/test.sh修改
 #!/bin/bash
-echo "=== Step1改进验证 ==="
+echo "=== Step1实施验证 ==="
+
+BASE_URL="http://localhost:9000"
 
 # 1. 验证现有OAuth2流程
-echo "验证现有OAuth2授权码流程..."
-# 基于现有test.sh的逻辑
+echo "--- 验证现有OAuth2授权码流程 ---"
+# 使用现有的test.sh脚本逻辑
 
-# 2. 验证新的token时间配置
-echo "验证token时间配置..."
-# 检查access token 15分钟，refresh token 30天
+# 2. 验证Token配置更新
+echo "--- 验证Token时间配置 ---"
+# 检查数据库中的token_settings
+# 测试token过期时间
 
-# 3. 验证增强的认证端点
-echo "验证前端友好认证端点..."
-# 测试新的login和refresh端点
+# 3. 验证JWT增强
+echo "--- 验证JWT权限增强 ---"
+# 解码JWT并检查新的claims
+
+# 4. 验证新端点
+echo "--- 验证增强的认证端点 ---"
+# 测试/web-clients/oauth2/token增强功能
+# 测试/userinfo端点
 ```
+
+## 📋 修正后的文件修改清单
+
+### 必须修改的文件
+1. **`src/main/resources/data.sql`**（第120-144行）- 更新token时间配置
+2. **`src/main/java/org/dddml/ffvtraceability/auth/config/AuthorizationServerConfig.java`**（第113-151行）- 增强JWT权限信息
+3. **`src/main/java/org/dddml/ffvtraceability/auth/controller/WebTokenController.java`**（全文）- 增强现有端点功能
+
+### 可选修改的文件
+4. **`src/main/resources/application.yml`** - 添加前端友好配置
+5. **新建相关测试文件** - 验证增强功能
+
+### 预计工作量
+**总计：5-7个工作日**（相比原计划大幅降低）
+
+**关键发现**：
+- ✅ 项目已具备完整的JWT能力，无需从零实现
+- ✅ AuthorizationServerConfig已有tokenGenerator配置，只需增强
+- ✅ WebTokenController已存在，只需扩展功能
+- ⚠️ 主要工作是优化配置和增强现有功能，而非重构
 
 ## 📊 实施计划（现实版）
 
