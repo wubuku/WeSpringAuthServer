@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:th="https://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <title>User Permission Management</title>
+    <meta name="X-Auth-Token" th:if="${session != null}" th:content="${session.id}">
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .user-select {
+            margin-bottom: 20px;
+        }
+        .permission-tree {
+            margin: 24px 0;
+            font-size: 14px;
+        }
+        .tree-node {
+            margin: 6px 0;
+            padding-left: 24px;
+        }
+        .tree-node label {
+            display: inline-block;
+            margin-left: 8px;
+            cursor: pointer;
+        }
+        .error {
+            color: #dc3545;
+            padding: 10px 20px;
+            margin: 10px 0;
+            border: 1px solid #dc3545;
+            border-radius: 4px;
+            background-color: white;
+            min-width: 200px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .success {
+            color: #28a745;
+            padding: 10px 20px;
+            margin: 10px 0;
+            border: 1px solid #28a745;
+            border-radius: 4px;
+            background-color: white;
+            min-width: 200px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .logout-btn:hover {
+            background: #c82333;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+        .message-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .error.show, .success.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .select-type {
+            margin-bottom: 16px;
+        }
+        
+        .select-type label {
+            margin-right: 24px;
+            cursor: pointer;
+        }
+        
+        .select-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .current-target {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin: 0;
+        }
+        select, input[type="radio"] {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        select:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+        }
+        label {
+            color: #555;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .permission-checkbox {
+            cursor: pointer;
+        }
+        .home-btn {
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.2s;
+        }
+        .home-btn:hover {
+            background: #0056b3;
+        }
+        .back-btn {
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.2s;
+        }
+        
+        .back-btn:hover {
+            background: #5a6268;
+        }
+        .permission-tree-placeholder {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            color: #6c757d;
+            border: 1px dashed #dee2e6;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+
+        /* 未选择目标时禁用复选框的样式 */
+        .permission-checkbox[disabled] {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" sec:authorize="hasRole('ADMIN')">
+        <div class="header">
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <a href="/" class="home-btn">
+                    <i>🏠</i> Home
+                </a>
+                <a id="back-btn" class="back-btn">
+                    <i>⬅️</i> Back
+                </a>
+                <h1>User Permission Management</h1>
+            </div>
+            <form th:action="@{/logout}" method="post" style="margin: 0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+                <button type="submit" class="logout-btn">Logout</button>
+            </form>
+        </div>
+
+        <div class="user-select">
+            <div class="select-type">
+                <label>
+                    <input type="radio" name="targetType" value="user" checked 
+                           id="userTypeRadio"> User
+                </label>
+                <label>
+                    <input type="radio" name="targetType" value="group" 
+                           id="groupTypeRadio"> Group
+                </label>
+            </div>
+            <div class="select-container">
+                <label for="target">Select User or Group:</label>
+                <select id="target"></select>
+            </div>
+        </div>
+
+        <div id="permission-tree" class="permission-tree"></div>
+    </div>
+
+    <div class="loading-overlay" id="loading-overlay">
+        <div style="text-align: center;">
+            <div class="spinner"></div>
+            <div class="loading-text">Loading...</div>
+        </div>
+    </div>
+
+    <div class="message-container">
+        <div id="error-message" class="error"></div>
+        <div id="success-message" class="success"></div>
+    </div>
+
+    <script th:inline="javascript">
+        let basePermissions = [];
+        let currentPermissions = new Set();
+        let currentTarget = null;
+        let currentTargetType = 'user';
+        let groups = [];
+
+        function showLoading() {
+            document.getElementById('loading-overlay').style.display = 'flex';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        // 页面加载时的初始化函数
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                showLoading();
+                
+                // 1. 设置回退按钮
+                const urlParams = new URLSearchParams(window.location.search);
+                const fromPage = urlParams.get('from');
+                const backBtn = document.getElementById('back-btn');
+                if (fromPage === 'user-management') {
+                    backBtn.href = '/user-management';
+                } else if (fromPage === 'group-management') {
+                    backBtn.href = '/group-management';
+                } else {
+                    backBtn.href = '/';
+                }
+
+                // 2. 加载基础数据
+                await loadBasePermissions();
+                await loadGroups();
+
+                // 3. 处理从用户管理或组管理页面进入的情况
+                const type = urlParams.get('type');
+                const target = urlParams.get('target');
+                
+                if ((type === 'user' && fromPage === 'user-management') || 
+                    (type === 'group' && fromPage === 'group-management')) {
+                    // 从管理页面进入的特殊处理
+                    console.log(`Entering from ${fromPage}`);
+                    
+                    // 禁用选择器
+                    document.getElementById('userTypeRadio').disabled = true;
+                    document.getElementById('groupTypeRadio').disabled = true;
+                    document.getElementById('target').disabled = true;
+                    
+                    // 设置当前值
+                    currentTargetType = type;
+                    document.getElementById(`${type}TypeRadio`).checked = true;
+                    
+                    // 更新选择器并设置值
+                    await updateTargetSelect();
+                    const targetSelect = document.getElementById('target');
+                    targetSelect.value = target;
+                    
+                    // 加载目标权限
+                    currentTarget = target;
+                    await loadTargetPermissions();
+                    renderPermissionTree();
+                } else {
+                    // 从首页进入的原有逻辑
+                    console.log('Entering from home page');
+                    
+                    // 启用所有控件
+                    document.getElementById('userTypeRadio').disabled = false;
+                    document.getElementById('groupTypeRadio').disabled = false;
+                    document.getElementById('target').disabled = false;
+                    
+                    // 监听类型选择变化
+                    document.querySelectorAll('input[name="targetType"]').forEach(radio => {
+                        radio.addEventListener('change', async (e) => {
+                            currentTargetType = e.target.value;
+                            await updateTargetSelect();
+                        });
+                    });
+                    
+                    // 监听目标选择变化
+                    document.getElementById('target').addEventListener('change', async (e) => {
+                        currentTarget = e.target.value;
+                        currentPermissions.clear();
+                        
+                        if (currentTarget) {
+                            await loadTargetPermissions();
+                        }
+                        
+                        renderPermissionTree();
+                    });
+                    
+                    // 初始化选择器
+                    await updateTargetSelect();
+                }
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showError('Failed to initialize: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        // Load users from backend
+        async function loadUsers() {
+            showLoading();
+            try {
+                console.log('Fetching users list...');
+                const response = await fetch('/api/permissions/users', {
+                    headers: {
+                        [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
+                    }
+                });
+                const users = await response.json();
+                console.log('Received users data:', users);
+                return users;
+            } catch (error) {
+                console.error('Error loading users:', error);
+                showError('Failed to load users: ' + error.message);
+                return [];
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Load base permissions
+        async function loadBasePermissions() {
+            showLoading();
+            try {
+                console.log('Loading base permissions...');
+                const response = await fetch('/api/permissions/base', {
+                    headers: {
+                        [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
+                    }
+                });
+                const permissions = await response.json();
+                console.log('Received base permissions:', permissions);
+                basePermissions = permissions.filter(p => p.enabled !== false);
+                console.log('Filtered active permissions:', basePermissions);
+            } catch (error) {
+                console.error('Error loading base permissions:', error);
+                showError('Failed to load permissions: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Load users from backend
+        async function loadGroups() {
+            try {
+                const response = await fetch('/api/permissions/groups', {
+                    headers: {
+                        [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
+                    }
+                });
+                groups = await response.json();
+            } catch (error) {
+                console.error('Error loading groups:', error);
+                showError('Failed to load groups: ' + error.message);
+            }
+        }
+
+        // 更新选择器选项
+        async function updateTargetSelect() {
+            const select = document.getElementById('target');
+            select.innerHTML = '<option value="">Select...</option>';
+            
+            if (currentTargetType === 'user') {
+                const users = await loadUsers();
+                if (Array.isArray(users)) {
+                    users.forEach(username => {
+                        const option = document.createElement('option');
+                        option.value = username;
+                        option.textContent = username;
+                        select.appendChild(option);
+                    });
+                }
+            } else {
+                groups.forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group.id;
+                    option.textContent = group.name;
+                    select.appendChild(option);
+                });
+            }
+            
+            // 清空当前权限
+            currentTarget = null;
+            currentPermissions.clear();
+            renderPermissionTree();
+        }
+
+        // 加载目标的权限
+        async function loadTargetPermissions() {
+            showLoading();
+            try {
+                let response;
+                if (currentTargetType === 'user') {
+                    response = await fetch(`/api/permissions/user/${currentTarget}`);
+                } else {
+                    response = await fetch(`/api/permissions/group/${currentTarget}`);
+                }
+                const permissions = await response.json();
+                currentPermissions = new Set(permissions);
+            } catch (error) {
+                console.error('Error loading permissions:', error);
+                showError('Failed to load permissions: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Build and render the permission tree
+        function renderPermissionTree() {
+            const treeContainer = document.getElementById('permission-tree');
+            
+            if (!currentTarget) {
+                // 当没有选择目标时显示提示信息
+                treeContainer.innerHTML = `
+                    <div class="permission-tree-placeholder">
+                        <i>ℹ️</i> Please select a ${currentTargetType} to manage permissions
+                    </div>
+                `;
+                return;
+            }
+
+            const tree = buildPermissionTree(basePermissions);
+            const treeHtml = renderTreeNode(tree);
+            treeContainer.innerHTML = treeHtml;
+            
+            // Add event listeners to checkboxes
+            document.querySelectorAll('.permission-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', handlePermissionChange);
+            });
+
+            // 初始化父节点状态
+            updateParentNodeStates();
+        }
+
+        // Build tree structure from flat permissions
+        function buildPermissionTree(permissions) {
+            const tree = {};
+            permissions.forEach(permission => {
+                // 如果权限被明确禁用（enabled = false），则跳过
+                if (permission.enabled === false) {
+                    return;
+                }
+
+                const parts = permission.permission_id.split('_');
+                let current = tree;
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (i === parts.length - 1) {
+                        current[part] = {};  // 叶子节点
+                    } else {
+                        current[part] = current[part] || {};
+                        current = current[part];
+                    }
+                }
+            });
+            return tree;
+        }
+
+        // Render tree node recursively
+        function renderTreeNode(node, path = []) {
+            let html = '<ul>';
+            for (const [key, value] of Object.entries(node)) {
+                const currentPath = [...path, key];
+                const fullPermission = currentPath.join('_');
+                const isLeaf = Object.keys(value).length === 0;
+                
+                html += `<li class="tree-node">`;
+                html += `<input type="checkbox" class="permission-checkbox" 
+                               id="${fullPermission}" 
+                               data-permission="${fullPermission}"
+                               data-is-parent="${!isLeaf}"
+                               ${currentPermissions.has(fullPermission) ? 'checked' : ''}
+                               ${!currentTarget ? 'disabled' : ''}>`;
+                html += `<label for="${fullPermission}" ${!currentTarget ? 'style="cursor: default;"' : ''}>${key}</label>`;
+                
+                if (!isLeaf) {
+                    html += renderTreeNode(value, currentPath);
+                }
+                html += '</li>';
+            }
+            html += '</ul>';
+            return html;
+        }
+
+        // Handle permission checkbox changes
+        async function handlePermissionChange(event) {
+            if (!currentTarget) return;
+
+            const checkbox = event.target;
+            const permission = checkbox.dataset.permission;
+            const isParent = checkbox.dataset.isParent === 'true';
+            const isChecked = checkbox.checked;
+            
+            if (isParent) {
+                // 如果是中间状态，点击后应该变为未选中状态
+                if (checkbox.indeterminate) {
+                    checkbox.indeterminate = false;
+                    checkbox.checked = false;
+                }
+                
+                const childPermissions = getChildPermissions(permission);
+                
+                showLoading();
+                try {
+                    const endpoint = currentTargetType === 'user' ? 
+                        '/api/permissions/batch-update' : 
+                        '/api/permissions/group/batch-update';
+                    
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
+                        },
+                        body: JSON.stringify(currentTargetType === 'user' ? {
+                            username: currentTarget,
+                            permissions: childPermissions,
+                            granted: isChecked
+                        } : {
+                            groupId: currentTarget,
+                            permissions: childPermissions,
+                            granted: isChecked
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to update permissions');
+                    }
+
+                    // 更新复选框状态
+                    childPermissions.forEach(perm => {
+                        const childCheckbox = document.querySelector(`input[data-permission="${perm}"]`);
+                        if (childCheckbox) {
+                            childCheckbox.checked = isChecked;
+                        }
+                        if (isChecked) {
+                            currentPermissions.add(perm);
+                        } else {
+                            currentPermissions.delete(perm);
+                        }
+                    });
+
+                    showSuccess(`Permissions ${isChecked ? 'granted' : 'revoked'} successfully`);
+                } catch (error) {
+                    showError('Failed to update permissions: ' + error.message);
+                    checkbox.checked = !isChecked;
+                } finally {
+                    hideLoading();
+                    updateParentNodeStates(); // 更新所有父节点状态
+                }
+            } else {
+                // 叶子节点处理逻辑
+                showLoading();
+                try {
+                    const endpoint = currentTargetType === 'user' ? 
+                        '/api/permissions/update' : 
+                        '/api/permissions/group/update';
+                    
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
+                        },
+                        body: JSON.stringify(currentTargetType === 'user' ? {
+                            username: currentTarget,
+                            permission: permission,
+                            granted: isChecked
+                        } : {
+                            groupId: currentTarget,
+                            permission: permission,
+                            granted: isChecked
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to update permission');
+                    }
+
+                    if (isChecked) {
+                        currentPermissions.add(permission);
+                    } else {
+                        currentPermissions.delete(permission);
+                    }
+
+                    showSuccess(`Permission ${isChecked ? 'granted' : 'revoked'} successfully`);
+                } catch (error) {
+                    showError('Failed to update permission: ' + error.message);
+                    checkbox.checked = !isChecked; // Revert checkbox state
+                } finally {
+                    hideLoading();
+                    updateParentNodeStates(); // 更新所有父节点状态
+                }
+            }
+        }
+
+        // 添加获取子节点权限的辅助函数
+        function getChildPermissions(parentPermission) {
+            const permissions = [];
+            const parentParts = parentPermission.split('_');
+            
+            // 递归查找所有叶子节点权限
+            function findLeafPermissions(node, currentPath) {
+                for (const [key, value] of Object.entries(node)) {
+                    const newPath = [...currentPath, key];
+                    if (Object.keys(value).length === 0) {
+                        permissions.push(newPath.join('_'));
+                    } else {
+                        findLeafPermissions(value, newPath);
+                    }
+                }
+            }
+            
+            // 从父节点开始查找
+            let currentNode = buildPermissionTree(basePermissions);
+            let path = [];
+            for (const part of parentParts) {
+                path.push(part);
+                currentNode = findNodeByPath(currentNode, part);
+            }
+            
+            findLeafPermissions(currentNode, path);
+            return permissions;
+        }
+
+        // 添加查找节点的辅助函数
+        function findNodeByPath(node, pathPart) {
+            // 如果输入是数组，需要先将其转换为树形结构
+            if (Array.isArray(node)) {
+                node = buildPermissionTree(node);
+            }
+            
+            for (const [key, value] of Object.entries(node)) {
+                if (key === pathPart) {
+                    return value;
+                }
+            }
+            return {};
+        }
+
+        // 添加更新父节点状态的函数
+        function updateParentNodeStates() {
+            // 从下往上遍历，更新父节点状态
+            const parents = new Set();
+            document.querySelectorAll('.permission-checkbox[data-is-parent="true"]').forEach(parentCheckbox => {
+                parents.add(parentCheckbox.dataset.permission);
+            });
+
+            parents.forEach(parentPermission => {
+                const parentCheckbox = document.querySelector(`input[data-permission="${parentPermission}"]`);
+                const childCheckboxes = getChildCheckboxes(parentPermission);
+                
+                const checkedCount = childCheckboxes.filter(cb => cb.checked).length;
+                
+                if (checkedCount === 0) {
+                    // 没有子节点选中
+                    parentCheckbox.checked = false;
+                    parentCheckbox.indeterminate = false;
+                } else if (checkedCount === childCheckboxes.length) {
+                    // 所有子节点都选中
+                    parentCheckbox.checked = true;
+                    parentCheckbox.indeterminate = false;
+                } else {
+                    // 部分子节点选中
+                    parentCheckbox.checked = false;
+                    parentCheckbox.indeterminate = true;
+                }
+            });
+        }
+
+        // 获取子节点复选框的辅助函数
+        function getChildCheckboxes(parentPermission) {
+            const childPermissions = getChildPermissions(parentPermission);
+            return childPermissions.map(perm => 
+                document.querySelector(`input[data-permission="${perm}"]`)
+            ).filter(Boolean);
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            const successDiv = document.getElementById('success-message');
+            errorDiv.textContent = message;
+            successDiv.classList.remove('show');
+            errorDiv.classList.add('show');
+            setTimeout(() => {
+                errorDiv.classList.remove('show');
+            }, 3000);
+        }
+
+        function showSuccess(message) {
+            const errorDiv = document.getElementById('error-message');
+            const successDiv = document.getElementById('success-message');
+            successDiv.textContent = message;
+            errorDiv.classList.remove('show');
+            successDiv.classList.add('show');
+            setTimeout(() => {
+                successDiv.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,3 @@
+src/main/resources/keys/jwt-signing-keys.jks
+scripts/*.env
+scripts/cookies.txt

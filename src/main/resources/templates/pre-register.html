@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:th="https://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <title>User Pre-Registration</title>
+    <meta name="X-Auth-Token" th:if="${session != null}" th:content="${session.id}">
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .error {
+            color: #dc3545;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #dc3545;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            color: #28a745;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #28a745;
+            border-radius: 4px;
+            display: none;
+        }
+        .otp-display {
+            font-family: monospace;
+            font-size: 24px;
+            text-align: center;
+            margin: 20px 0;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+            display: none;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .logout-btn {
+            padding: 8px 16px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .logout-btn:hover {
+            background: #c82333;
+        }
+        .message-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .error, .success {
+            padding: 10px 20px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background-color: white;
+            min-width: 200px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .error {
+            color: #dc3545;
+            border: 1px solid #dc3545;
+        }
+
+        .success {
+            color: #28a745;
+            border: 1px solid #28a745;
+        }
+
+        .error.show, .success.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .home-btn {
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.2s;
+        }
+        .home-btn:hover {
+            background: #0056b3;
+        }
+        .back-btn {
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.2s;
+        }
+        .back-btn:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <!-- Only show to users with ROLE_ADMIN -->
+    <div class="container" sec:authorize="hasRole('ADMIN')">
+        <div class="header">
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <a href="/" class="home-btn">
+                    <i>🏠</i> Home
+                </a>
+                <a id="back-btn" class="back-btn">
+                    <i>⬅️</i> Back
+                </a>
+                <h1>Pre-register User</h1>
+            </div>
+            <form th:action="@{/logout}" method="post" style="margin: 0;">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+                <button type="submit" class="logout-btn">Logout</button>
+            </form>
+        </div>
+
+        <div class="message-container">
+            <div id="error-message" class="error"></div>
+            <div id="success-message" class="success"></div>
+        </div>
+
+        <div id="otp-display" class="otp-display"></div>
+
+        <form id="pre-register-form">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" 
+                       pattern="^[a-zA-Z0-9_-]{3,50}$" 
+                       title="Username must be 3-50 characters long and contain only letters, numbers, underscore or hyphen"
+                       required />
+            </div>
+            <button type="submit">Pre-register User</button>
+        </form>
+    </div>
+
+    <script th:inline="javascript">
+        document.getElementById('pre-register-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const errorDiv = document.getElementById('error-message');
+            const successDiv = document.getElementById('success-message');
+            const otpDiv = document.getElementById('otp-display');
+            const username = document.getElementById('username').value;
+
+            try {
+                const response = await fetch('/api/users/pre-register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
+                    },
+                    body: JSON.stringify({ username: username })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to pre-register user');
+                }
+
+                const data = await response.json();
+                
+                errorDiv.style.display = 'none';
+                successDiv.style.display = 'block';
+                successDiv.textContent = `User ${data.username} has been pre-registered successfully!`;
+                
+                otpDiv.style.display = 'block';
+                otpDiv.textContent = `One-Time Password: ${data.oneTimePassword}`;
+                
+                // Clear form
+                document.getElementById('username').value = '';
+                
+                // Clear OTP after 5 minutes
+                setTimeout(() => {
+                    otpDiv.style.display = 'none';
+                    otpDiv.textContent = '';
+                }, 300000);
+
+            } catch (error) {
+                successDiv.style.display = 'none';
+                otpDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = error.message || 'An error occurred';
+            }
+        });
+    </script>
+
+    <script>
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            const successDiv = document.getElementById('success-message');
+            errorDiv.textContent = message;
+            successDiv.classList.remove('show');
+            errorDiv.classList.add('show');
+            setTimeout(() => {
+                errorDiv.classList.remove('show');
+            }, 3000);
+        }
+
+        function showSuccess(message) {
+            const errorDiv = document.getElementById('error-message');
+            const successDiv = document.getElementById('success-message');
+            successDiv.textContent = message;
+            errorDiv.classList.remove('show');
+            successDiv.classList.add('show');
+            setTimeout(() => {
+                successDiv.classList.remove('show');
+            }, 3000);
+        }
+
+        // 获取来源页面参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromPage = urlParams.get('from');
+        
+        // 设置返回按钮的链接
+        const backBtn = document.getElementById('back-btn');
+        if (fromPage === 'user-management') {
+            backBtn.href = '/user-management';
+        } else {
+            backBtn.href = '/';  // 默认返回首页
+        }
+    </script>
+</body>
+</html> 
