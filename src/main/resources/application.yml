@@ -130,8 +130,8 @@ auth:
 # 微信登录配置
 wechat:
   mp:
-    app-id: ${WECHAT_APP_ID:wxd9ec188a73d35963}
-    app-secret: ${WECHAT_APP_SECRET:8335dd8b75f3bd7ec7143b7b6307b528}
+    app-id: ${WECHAT_APP_ID:YOUR_APP_ID}
+    app-secret: ${WECHAT_APP_SECRET:YOUR_APP_SECRET}
     token: ${WECHAT_TOKEN:your-token}
     aes-key: ${WECHAT_AES_KEY:your-aes-key}
     redirect-uri: ${WECHAT_REDIRECT_URI:http://192.168.0.103:9000/wechat/callback}
@@ -148,11 +148,11 @@ sms:
     template-code: ${SMS_TEMPLATE_CODE:your-template-code}
     region: ${SMS_REGION:cn-hangzhou}
   huoshan:
-    access-key-id: ${HUOSHAN_SMS_ACCESS_KEY_ID:AKLTZWUzMWI2YzQyY2E5NDY2YWE5OTFkNGZhMzA1YjEzMDU}
-    secret-key: ${HUOSHAN_SMS_SECRET_KEY:TnpaaE1qUmlPRFpsWWpobE5EVXpOV0ZoWVRBME1HRmpaRGRtT0dabE1tSQ==}
+    access-key-id: ${HUOSHAN_SMS_ACCESS_KEY_ID:your-access-key-id}
+    secret-key: ${HUOSHAN_SMS_SECRET_KEY:your-secret-key}
     endpoint: ${HUOSHAN_SMS_ENDPOINT:https://sms.volcengineapi.com}
-    sign-name: ${HUOSHAN_SMS_SIGN_NAME:上海羚驭信息技术有限公司}
-    template-id: ${HUOSHAN_SMS_TEMPLATE_ID:ST_84438119}
-    sms-account: ${HUOSHAN_SMS_ACCOUNT:83a8b6ac}
+    sign-name: ${HUOSHAN_SMS_SIGN_NAME:your-sign-name}
+    template-id: ${HUOSHAN_SMS_TEMPLATE_ID:your-template-id}
+    sms-account: ${HUOSHAN_SMS_ACCOUNT:your-sms-account}
     region: ${HUOSHAN_SMS_REGION:cn-north-1}
 
