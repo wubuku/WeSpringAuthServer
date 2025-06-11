@@ -22,7 +22,6 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-security.version>6.3.0</spring-security.version>
         <spring-authorization-server.version>1.3.3</spring-authorization-server.version>
         <postgresql.version>42.7.6</postgresql.version>
         <weixin-java.version>4.7.0</weixin-java.version>
