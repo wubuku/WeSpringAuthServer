@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.springframework.security.oauth2.core.AuthorizationGrantType.AUTHORIZATION_CODE;
+import static org.springframework.security.oauth2.core.AuthorizationGrantType.CLIENT_CREDENTIALS;
 
 @Controller
 public class SocialLoginController {
@@ -102,7 +103,7 @@ public class SocialLoginController {
             DefaultOAuth2TokenContext.Builder tokenContextBuilder = DefaultOAuth2TokenContext.builder()
                     .registeredClient(registeredClient)
                     .principal(authentication)
-                    .authorizationGrantType(AUTHORIZATION_CODE)//(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                    .authorizationGrantType(CLIENT_CREDENTIALS)//(AuthorizationGrantType.CLIENT_CREDENTIALS)
                     //.authorizationServerContext(AuthorizationServerContextHolder.getContext())
                     .authorizedScopes(Set.of("openid", "profile"))
                     .tokenType(OAuth2TokenType.ACCESS_TOKEN);
@@ -116,6 +117,24 @@ public class SocialLoginController {
                         "The token generator failed to generate the access token.", ERROR_URI);
                 throw new OAuth2AuthenticationException(error);
             }
+            OAuth2RefreshToken refreshToken = null;
+            // Do not issue refresh token to public client
+            //if (registeredClient.getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN)) {
+                tokenContext = tokenContextBuilder.tokenType(OAuth2TokenType.REFRESH_TOKEN).build();
+                OAuth2Token generatedRefreshToken = this.tokenGenerator.generate(tokenContext);
+                if (generatedRefreshToken != null) {
+                    if (!(generatedRefreshToken instanceof OAuth2RefreshToken)) {
+                        OAuth2Error error = new OAuth2Error(OAuth2ErrorCodes.SERVER_ERROR,
+                                "The token generator failed to generate a valid refresh token.", ERROR_URI);
+                        throw new OAuth2AuthenticationException(error);
+                    }
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("Generated refresh token");
+                    }
+                    refreshToken = (OAuth2RefreshToken) generatedRefreshToken;
+                }
+            //}
+
             OidcIdToken idToken = null;
             Map<String, Object> additionalParameters = Collections.emptyMap();
             if (idToken != null) {
@@ -130,6 +149,7 @@ public class SocialLoginController {
             // Create response with token
             Map<String, Object> responseBody = new HashMap<>();
             responseBody.put("access_token", generatedAccessToken.getTokenValue());
+            responseBody.put("refresh_token",refreshToken.getTokenValue());
             responseBody.put("token_type", "Bearer");
             //if (generatedAccessToken instanceof OAuth2AccessToken accessToken) {
             if (generatedAccessToken.getIssuedAt() != null && generatedAccessToken.getExpiresAt() != null) {
