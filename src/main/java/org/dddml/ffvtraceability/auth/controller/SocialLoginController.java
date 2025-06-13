@@ -1,7 +1,6 @@
 package org.dddml.ffvtraceability.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.exception.AuthenticationException;
@@ -16,28 +15,22 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.*;
-import org.springframework.security.oauth2.core.oidc.OidcIdToken;
-import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
-import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AccessTokenAuthenticationToken;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
 import org.springframework.security.oauth2.server.authorization.token.DefaultOAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
-import org.springframework.security.oauth2.server.authorization.web.authentication.OAuth2AccessTokenResponseAuthenticationSuccessHandler;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import static org.springframework.security.oauth2.core.AuthorizationGrantType.AUTHORIZATION_CODE;
 import static org.springframework.security.oauth2.core.AuthorizationGrantType.CLIENT_CREDENTIALS;
 
 @Controller
@@ -83,8 +76,9 @@ public class SocialLoginController {
      * WeChat login
      */
     @GetMapping("/wechat/login")
-    public void weChatCallback(@RequestParam("code") String code, HttpServletRequest request,
-                               HttpServletResponse response) throws IOException {
+    public void wechatLogin(@RequestParam("code") String code,
+                            HttpServletRequest request,
+                            HttpServletResponse response) throws IOException {
         try {
             // Process the WeChat login
             CustomUserDetails userDetails = weChatService.processWeChatLogin(code);
@@ -120,27 +114,27 @@ public class SocialLoginController {
             OAuth2RefreshToken refreshToken = null;
             // Do not issue refresh token to public client
             //if (registeredClient.getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN)) {
-                tokenContext = tokenContextBuilder.tokenType(OAuth2TokenType.REFRESH_TOKEN).build();
-                OAuth2Token generatedRefreshToken = this.tokenGenerator.generate(tokenContext);
-                if (generatedRefreshToken != null) {
-                    if (!(generatedRefreshToken instanceof OAuth2RefreshToken)) {
-                        OAuth2Error error = new OAuth2Error(OAuth2ErrorCodes.SERVER_ERROR,
-                                "The token generator failed to generate a valid refresh token.", ERROR_URI);
-                        throw new OAuth2AuthenticationException(error);
-                    }
-                    if (logger.isTraceEnabled()) {
-                        logger.trace("Generated refresh token");
-                    }
-                    refreshToken = (OAuth2RefreshToken) generatedRefreshToken;
+            tokenContext = tokenContextBuilder.tokenType(OAuth2TokenType.REFRESH_TOKEN).build();
+            OAuth2Token generatedRefreshToken = this.tokenGenerator.generate(tokenContext);
+            if (generatedRefreshToken != null
+                    && generatedRefreshToken.getTokenValue() != null
+                    && generatedRefreshToken instanceof OAuth2RefreshToken) {
+                if (logger.isTraceEnabled()) {
+                    logger.trace("Generated refresh token");
                 }
-            //}
-
-            OidcIdToken idToken = null;
-            Map<String, Object> additionalParameters = Collections.emptyMap();
-            if (idToken != null) {
-                additionalParameters = new HashMap<>();
-                additionalParameters.put(OidcParameterNames.ID_TOKEN, idToken.getTokenValue());
+                refreshToken = (OAuth2RefreshToken) generatedRefreshToken;
+            } else {
+                OAuth2Error error = new OAuth2Error(OAuth2ErrorCodes.SERVER_ERROR,
+                        "The token generator failed to generate a valid refresh token.", ERROR_URI);
+                throw new OAuth2AuthenticationException(error);
             }
+//}
+//            OidcIdToken idToken = null;
+//            Map<String, Object> additionalParameters = Collections.emptyMap();
+//            if (idToken != null) {
+//                additionalParameters = new HashMap<>();
+//                additionalParameters.put(OidcParameterNames.ID_TOKEN, idToken.getTokenValue());
+//            }
 //            Authentication oAuth2AccessTokenAuthenticationToken =
 //                    new OAuth2AccessTokenAuthenticationToken(registeredClient, clientPrincipal, generatedAccessToken, null,
 //                            additionalParameters);
@@ -149,7 +143,7 @@ public class SocialLoginController {
             // Create response with token
             Map<String, Object> responseBody = new HashMap<>();
             responseBody.put("access_token", generatedAccessToken.getTokenValue());
-            responseBody.put("refresh_token",refreshToken.getTokenValue());
+            responseBody.put("refresh_token", refreshToken.getTokenValue());
             responseBody.put("token_type", "Bearer");
             //if (generatedAccessToken instanceof OAuth2AccessToken accessToken) {
             if (generatedAccessToken.getIssuedAt() != null && generatedAccessToken.getExpiresAt() != null) {
@@ -157,7 +151,6 @@ public class SocialLoginController {
                         generatedAccessToken.getIssuedAt().getEpochSecond());
             }
             //}
-
             // Write response
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write(new ObjectMapper().writeValueAsString(responseBody));
@@ -167,7 +160,7 @@ public class SocialLoginController {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "authentication_failed");
-            errorResponse.put("error_description", "WeChat authentication failed");
+            errorResponse.put("error_description", "WeChat authentication failed" + e.getMessage());
             response.getWriter().write(new ObjectMapper().writeValueAsString(errorResponse));
         }
     }
