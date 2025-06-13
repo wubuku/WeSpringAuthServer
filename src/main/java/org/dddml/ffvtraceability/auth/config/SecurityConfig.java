@@ -13,6 +13,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -52,9 +53,10 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource))
-                .csrf(csrf ->
-                        csrf.ignoringRequestMatchers("/web-clients/oauth2/**"
-                                , "/api/sms/send-code"))
+                .sessionManagement(s -> s
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                .csrf(c -> c.disable())
                 .authorizeHttpRequests(authorize -> authorize
                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                                 // .requestMatchers(

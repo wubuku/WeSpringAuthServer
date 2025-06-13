@@ -112,33 +112,34 @@ public class AuthorizationServerConfig {
         return source;
     }
 
-    private OAuth2TokenGenerator<?> tokenGenerator() {
+    @Bean
+    public OAuth2TokenGenerator<?> tokenGenerator() {
         JwtEncoder jwtEncoder = new NimbusJwtEncoder(jwkSource());
         JwtGenerator jwtGenerator = new JwtGenerator(jwtEncoder);
 
         // 添加自定义的 token claims
-        jwtGenerator.setJwtCustomizer(context -> {
-            if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
-                JwtClaimsSet.Builder claims = context.getClaims();
-                Authentication authentication = context.getPrincipal();
-
-                // 添加标准权限
-                Set<String> authorities = authentication.getAuthorities().stream()
-                        .map(GrantedAuthority::getAuthority)
-                        .collect(Collectors.toSet());
-                claims.claim("authorities", authorities);
-
-                // 从 Authentication details 中获取组信息
-                Object details = authentication.getDetails();
-                if (details instanceof Map) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> detailsMap = (Map<String, Object>) details;
-                    if (detailsMap.containsKey("groups")) {
-                        claims.claim("groups", detailsMap.get("groups"));
-                    }
-                }
-            }
-        });
+//        jwtGenerator.setJwtCustomizer(context -> {
+//            if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
+//                JwtClaimsSet.Builder claims = context.getClaims();
+//                Authentication authentication = context.getPrincipal();
+//
+//                // 添加标准权限
+//                Set<String> authorities = authentication.getAuthorities().stream()
+//                        .map(GrantedAuthority::getAuthority)
+//                        .collect(Collectors.toSet());
+//                claims.claim("authorities", authorities);
+//
+//                // 从 Authentication details 中获取组信息
+//                Object details = authentication.getDetails();
+//                if (details instanceof Map) {
+//                    @SuppressWarnings("unchecked")
+//                    Map<String, Object> detailsMap = (Map<String, Object>) details;
+//                    if (detailsMap.containsKey("groups")) {
+//                        claims.claim("groups", detailsMap.get("groups"));
+//                    }
+//                }
+//            }
+//        });
 
         OAuth2AccessTokenGenerator accessTokenGenerator = new OAuth2AccessTokenGenerator();
         OAuth2RefreshTokenGenerator refreshTokenGenerator = new OAuth2RefreshTokenGenerator();
