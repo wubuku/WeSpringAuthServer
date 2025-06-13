@@ -26,8 +26,11 @@ import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
+import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContext;
+import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContextHolder;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
 import org.springframework.security.oauth2.server.authorization.token.DefaultOAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
@@ -63,6 +66,9 @@ public class SocialLoginController {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private AuthorizationServerSettings authorizationServerSettings;
 
     public SocialLoginController(SmsService smsService, WeChatService weChatService) {
         this.smsService = smsService;
@@ -116,14 +122,45 @@ public class SocialLoginController {
                 throw new IllegalStateException("Registered client for WeChat not found");
             }
 
-            // 创建token上下文 - 改进：使用正确的授权类型
+            // 关键修复：获取或创建AuthorizationServerContext - 解决"value cannot be null"问题
+            AuthorizationServerContext authorizationServerContext = AuthorizationServerContextHolder.getContext();
+            
+            // 如果AuthorizationServerContext为null，手动创建一个
+            if (authorizationServerContext == null) {
+                // 创建AuthorizationServerContext，确保JWT customizer能正常工作
+                final AuthorizationServerSettings settings = authorizationServerSettings != null ? 
+                    authorizationServerSettings : 
+                    AuthorizationServerSettings.builder()
+                            .issuer("http://localhost:9000")
+                            .build();
+                            
+                authorizationServerContext = new AuthorizationServerContext() {
+                    @Override
+                    public String getIssuer() {
+                        return settings.getIssuer();
+                    }
+                    
+                    @Override
+                    public AuthorizationServerSettings getAuthorizationServerSettings() {
+                        return settings;
+                    }
+                };
+                logger.debug("Created AuthorizationServerContext with issuer: {}", authorizationServerContext.getIssuer());
+            }
+            
+            // 创建token上下文 - 完整版本，包含AuthorizationServerContext
             DefaultOAuth2TokenContext.Builder tokenContextBuilder = DefaultOAuth2TokenContext.builder()
                     .registeredClient(registeredClient)
                     .principal(authentication)
-                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE) // 修复：使用正确的授权类型
+                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizationGrant(authentication)
                     .authorizedScopes(Set.of("openid", "profile"))
                     .tokenType(OAuth2TokenType.ACCESS_TOKEN);
+            
+            // 现在确保总是有AuthorizationServerContext
+            tokenContextBuilder.authorizationServerContext(authorizationServerContext);
+            logger.debug("Added AuthorizationServerContext to token context: {}", 
+                authorizationServerContext.getIssuer());
 
             // 生成访问令牌 - 原有逻辑保持不变
             OAuth2TokenContext tokenContext = tokenContextBuilder.build();
@@ -150,8 +187,22 @@ public class SocialLoginController {
                 );
             }
             
-            // 生成刷新令牌 - 增强了验证逻辑
-            tokenContext = tokenContextBuilder.tokenType(OAuth2TokenType.REFRESH_TOKEN).build();
+            // 生成刷新令牌 - 重新构建context确保包含AuthorizationServerContext
+            DefaultOAuth2TokenContext.Builder refreshTokenContextBuilder = DefaultOAuth2TokenContext.builder()
+                    .registeredClient(registeredClient)
+                    .principal(authentication)
+                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                    .authorizationGrant(authentication)
+                    .authorizedScopes(Set.of("openid", "profile"))
+                    .tokenType(OAuth2TokenType.REFRESH_TOKEN);
+            
+            // 关键：为refresh token也添加AuthorizationServerContext
+            if (authorizationServerContext != null) {
+                refreshTokenContextBuilder.authorizationServerContext(authorizationServerContext);
+                logger.debug("Added AuthorizationServerContext to refresh token context");
+            }
+            
+            tokenContext = refreshTokenContextBuilder.build();
             OAuth2Token generatedRefreshToken = this.tokenGenerator.generate(tokenContext);
             OAuth2RefreshToken refreshToken = null;
             if (generatedRefreshToken != null
@@ -366,13 +417,41 @@ public class SocialLoginController {
                 Set.of() // empty authorities
             );
             
-            // Generate new access token
+            // Generate new access token - 修复：添加AuthorizationServerContext
+            // 获取或创建AuthorizationServerContext，确保JWT customizer能正常工作
+            AuthorizationServerContext authorizationServerContext = AuthorizationServerContextHolder.getContext();
+            if (authorizationServerContext == null) {
+                final AuthorizationServerSettings settings = authorizationServerSettings != null ? 
+                    authorizationServerSettings : 
+                    AuthorizationServerSettings.builder()
+                            .issuer("http://localhost:9000")
+                            .build();
+                            
+                authorizationServerContext = new AuthorizationServerContext() {
+                    @Override
+                    public String getIssuer() {
+                        return settings.getIssuer();
+                    }
+                    
+                    @Override
+                    public AuthorizationServerSettings getAuthorizationServerSettings() {
+                        return settings;
+                    }
+                };
+                logger.debug("Created AuthorizationServerContext for refresh token with issuer: {}", authorizationServerContext.getIssuer());
+            }
+            
             DefaultOAuth2TokenContext.Builder tokenContextBuilder = DefaultOAuth2TokenContext.builder()
                     .registeredClient(registeredClient)
                     .principal(principal)
                     .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                     .authorizedScopes(authorization.getAuthorizedScopes())
                     .tokenType(OAuth2TokenType.ACCESS_TOKEN);
+            
+            // 确保总是有AuthorizationServerContext
+            tokenContextBuilder.authorizationServerContext(authorizationServerContext);
+            logger.debug("Added AuthorizationServerContext to refresh token context: {}", 
+                authorizationServerContext.getIssuer());
             
             OAuth2TokenContext tokenContext = tokenContextBuilder.build();
             OAuth2Token newAccessToken = tokenGenerator.generate(tokenContext);

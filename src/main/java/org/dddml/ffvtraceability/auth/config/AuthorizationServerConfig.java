@@ -1,8 +1,6 @@
 package org.dddml.ffvtraceability.auth.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -31,6 +29,7 @@ import org.springframework.security.oauth2.server.authorization.client.JdbcRegis
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.token.*;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -117,34 +116,75 @@ public class AuthorizationServerConfig {
         JwtEncoder jwtEncoder = new NimbusJwtEncoder(jwkSource());
         JwtGenerator jwtGenerator = new JwtGenerator(jwtEncoder);
 
-        // 添加自定义的 token claims
-//        jwtGenerator.setJwtCustomizer(context -> {
-//            if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
-//                JwtClaimsSet.Builder claims = context.getClaims();
-//                Authentication authentication = context.getPrincipal();
-//
-//                // 添加标准权限
-//                Set<String> authorities = authentication.getAuthorities().stream()
-//                        .map(GrantedAuthority::getAuthority)
-//                        .collect(Collectors.toSet());
-//                claims.claim("authorities", authorities);
-//
-//                // 从 Authentication details 中获取组信息
-//                Object details = authentication.getDetails();
-//                if (details instanceof Map) {
-//                    @SuppressWarnings("unchecked")
-//                    Map<String, Object> detailsMap = (Map<String, Object>) details;
-//                    if (detailsMap.containsKey("groups")) {
-//                        claims.claim("groups", detailsMap.get("groups"));
-//                    }
-//                }
-//            }
-//        });
+        // 🎯 智能JWT定制器：兼容WeChat登录的安全解决方案
+        // 根据测试结果和源码分析，采用防御性编程确保兼容性
+        jwtGenerator.setJwtCustomizer(context -> {
+            if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
+                try {
+                    JwtClaimsSet.Builder claims = context.getClaims();
+                    Authentication authentication = context.getPrincipal();
+
+                    // 安全检查：确保AuthorizationServerContext存在
+                    if (context.getAuthorizationServerContext() == null) {
+                        logger.debug("AuthorizationServerContext is null, skipping JWT customization for safety");
+                        return;
+                    }
+
+                    // 添加issuer字段 - 对资源服务器很重要
+                    String issuer = authServerProperties.getIssuer();
+                    if (issuer != null && !issuer.trim().isEmpty()) {
+                        claims.issuer(issuer);
+                        logger.debug("Added issuer to JWT: {}", issuer);
+                    } else {
+                        claims.issuer("http://localhost:9000");
+                        logger.debug("Added default issuer to JWT");
+                    }
+
+                    // 安全地添加权限信息
+                    if (authentication != null) {
+                        try {
+                            Set<String> authorities = authentication.getAuthorities().stream()
+                                    .map(GrantedAuthority::getAuthority)
+                                    .collect(Collectors.toSet());
+                            if (!authorities.isEmpty()) {
+                                claims.claim("authorities", authorities);
+                                logger.debug("Added {} authorities to JWT", authorities.size());
+                            }
+                        } catch (Exception e) {
+                            logger.debug("Failed to add authorities to JWT: {}", e.getMessage());
+                        }
+
+                        // 安全地添加组信息 - 从Authentication details中获取
+                        try {
+                            Object details = authentication.getDetails();
+                            if (details instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> detailsMap = (Map<String, Object>) details;
+                                if (detailsMap.containsKey("groups")) {
+                                    Object groups = detailsMap.get("groups");
+                                    if (groups != null) {
+                                        claims.claim("groups", groups);
+                                        logger.debug("Added groups to JWT: {}", groups);
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.debug("Failed to add groups to JWT: {}", e.getMessage());
+                        }
+                    }
+
+                    logger.debug("JWT customization completed successfully");
+                } catch (Exception e) {
+                    logger.warn("JWT customization failed, continuing without custom claims: {}", e.getMessage());
+                    // 不抛出异常，让token生成继续进行
+                }
+            }
+        });
+
+        logger.info("智能JWT customizer已启用 - 对WeChat登录和标准OAuth2都安全兼容");
 
         OAuth2AccessTokenGenerator accessTokenGenerator = new OAuth2AccessTokenGenerator();
         OAuth2RefreshTokenGenerator refreshTokenGenerator = new OAuth2RefreshTokenGenerator();
-
-        // 令牌有效期将通过 RegisteredClient 配置来设置
 
         return new DelegatingOAuth2TokenGenerator(
                 jwtGenerator,
@@ -159,12 +199,12 @@ public class AuthorizationServerConfig {
 
     /**
      * 配置OAuth2授权服务，使用专门的ObjectMapper确保正确的序列化/反序列化
-     * 
+     * <p>
      * 修改说明：
      * 1. 使用oauth2ObjectMapper替代通用ObjectMapper，避免序列化冲突
      * 2. 配置OAuth2AuthorizationParametersMapper，确保参数正确序列化
      * 3. 添加日志记录，便于调试和问题诊断
-     * 
+     * <p>
      * 这些修改主要解决了refresh token功能中的ObjectMapper配置问题，
      * 确保OAuth2Authorization对象能够正确保存和读取access_token字段
      */
@@ -173,26 +213,26 @@ public class AuthorizationServerConfig {
             JdbcTemplate jdbcTemplate,
             RegisteredClientRepository registeredClientRepository,
             ObjectMapper oauth2ObjectMapper) {
-        
+
         logger.info("Creating OAuth2AuthorizationService with ObjectMapper: {}", oauth2ObjectMapper.getClass().getName());
         logger.info("ObjectMapper registered modules: {}", oauth2ObjectMapper.getRegisteredModuleIds());
-        
+
         JdbcOAuth2AuthorizationService service = new JdbcOAuth2AuthorizationService(
                 jdbcTemplate,
                 registeredClientRepository);
-        
+
         // 使用正确配置的ObjectMapper - 关键修复：确保OAuth2数据正确序列化
-        JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper rowMapper = 
+        JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper rowMapper =
                 new JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper(registeredClientRepository);
         rowMapper.setObjectMapper(oauth2ObjectMapper);
         service.setAuthorizationRowMapper(rowMapper);
-        
+
         // 重要：也要设置参数映射器的ObjectMapper，确保完整的序列化支持
-        JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper parametersMapper = 
+        JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper parametersMapper =
                 new JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper();
         parametersMapper.setObjectMapper(oauth2ObjectMapper);
         service.setAuthorizationParametersMapper(parametersMapper);
-        
+
         logger.info("OAuth2AuthorizationService configured with custom ObjectMapper");
         return service;
     }
@@ -239,18 +279,27 @@ public class AuthorizationServerConfig {
         }
     }
 
-//可以通过以下配置来设置 issuer
-// spring:
-//  security:
-//    oauth2:
-//      authorization-server:
-//        issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
-//    @Bean
-//    public AuthorizationServerSettings authorizationServerSettings() {
-//        return AuthorizationServerSettings.builder()
-//                .issuer(authServerProperties.getIssuer())
-//                .build();
-//    }
+    /**
+     * 配置OAuth2授权服务器设置，包括重要的issuer设置
+     * <p>
+     * issuer字段的重要性：
+     * 1. JWT安全性 - 标识token的发行者，防止token被其他系统错误接受
+     * 2. RFC 7519标准 - JWT标准推荐包含iss（issuer）字段
+     * 3. 微服务环境 - 在多服务环境中识别token来源
+     * 4. 审计和调试 - 帮助跟踪token的发行者
+     */
+    @Bean
+    public AuthorizationServerSettings authorizationServerSettings() {
+        String issuer = authServerProperties.getIssuer();
+        if (issuer == null || issuer.trim().isEmpty()) {
+            logger.warn("AuthServer issuer is null or empty, using default: http://localhost:9000");
+            issuer = "http://localhost:9000";
+        }
+        logger.info("AuthorizationServerSettings using issuer: {}", issuer);
+        return AuthorizationServerSettings.builder()
+                .issuer(issuer)
+                .build();
+    }
 
     @Bean
     public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
