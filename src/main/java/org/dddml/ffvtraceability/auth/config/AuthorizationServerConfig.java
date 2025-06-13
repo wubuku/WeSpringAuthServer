@@ -157,23 +157,43 @@ public class AuthorizationServerConfig {
         return new JdbcRegisteredClientRepository(jdbcTemplate);
     }
 
+    /**
+     * 配置OAuth2授权服务，使用专门的ObjectMapper确保正确的序列化/反序列化
+     * 
+     * 修改说明：
+     * 1. 使用oauth2ObjectMapper替代通用ObjectMapper，避免序列化冲突
+     * 2. 配置OAuth2AuthorizationParametersMapper，确保参数正确序列化
+     * 3. 添加日志记录，便于调试和问题诊断
+     * 
+     * 这些修改主要解决了refresh token功能中的ObjectMapper配置问题，
+     * 确保OAuth2Authorization对象能够正确保存和读取access_token字段
+     */
     @Bean
     public OAuth2AuthorizationService authorizationService(
             JdbcTemplate jdbcTemplate,
             RegisteredClientRepository registeredClientRepository,
-            ObjectMapper objectMapper) {
-        objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-
+            ObjectMapper oauth2ObjectMapper) {
+        
+        logger.info("Creating OAuth2AuthorizationService with ObjectMapper: {}", oauth2ObjectMapper.getClass().getName());
+        logger.info("ObjectMapper registered modules: {}", oauth2ObjectMapper.getRegisteredModuleIds());
+        
         JdbcOAuth2AuthorizationService service = new JdbcOAuth2AuthorizationService(
                 jdbcTemplate,
                 registeredClientRepository);
-        JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper rowMapper = new JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper(
-                registeredClientRepository);
-        rowMapper.setObjectMapper(objectMapper);
-        service.setAuthorizationRowMapper(
-                rowMapper);
-
+        
+        // 使用正确配置的ObjectMapper - 关键修复：确保OAuth2数据正确序列化
+        JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper rowMapper = 
+                new JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper(registeredClientRepository);
+        rowMapper.setObjectMapper(oauth2ObjectMapper);
+        service.setAuthorizationRowMapper(rowMapper);
+        
+        // 重要：也要设置参数映射器的ObjectMapper，确保完整的序列化支持
+        JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper parametersMapper = 
+                new JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper();
+        parametersMapper.setObjectMapper(oauth2ObjectMapper);
+        service.setAuthorizationParametersMapper(parametersMapper);
+        
+        logger.info("OAuth2AuthorizationService configured with custom ObjectMapper");
         return service;
     }
 

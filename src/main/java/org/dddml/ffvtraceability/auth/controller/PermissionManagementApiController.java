@@ -29,7 +29,7 @@ public class PermissionManagementApiController {
     private final JdbcTemplate jdbcTemplate;
 
     @Autowired
-    @Qualifier("restApiObjectMapper")
+    @Qualifier("defaultObjectMapper")
     private ObjectMapper objectMapper;
 
     public PermissionManagementApiController(JdbcTemplate jdbcTemplate) {
