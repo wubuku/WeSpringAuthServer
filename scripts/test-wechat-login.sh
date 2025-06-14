@@ -6,12 +6,18 @@
 # Base URL configuration
 BASE_URL="http://localhost:9000"
 
-# Default code (will be overridden by parameter or interactive input)
-# Check if WECHAT_CODE is set in environment
-if [[ -n "$WECHAT_CODE" ]]; then
-    echo -e "Using WeChat code from environment variable: ${WECHAT_CODE:0:20}..."
+# Default codes (will be overridden by parameter or interactive input)
+# Check if codes are set in environment variables
+if [[ -n "$WECHAT_LOGIN_CODE" ]]; then
+    echo -e "Using WeChat login code from environment variable: ${WECHAT_LOGIN_CODE:0:20}..."
 else
-    WECHAT_CODE=""
+    WECHAT_LOGIN_CODE=""
+fi
+
+if [[ -n "$WECHAT_MOBILE_CODE" ]]; then
+    echo -e "Using WeChat mobile code from environment variable: ${WECHAT_MOBILE_CODE:0:20}..."
+else
+    WECHAT_MOBILE_CODE=""
 fi
 
 # Script usage information
@@ -20,25 +26,31 @@ usage() {
 Usage: $0 [OPTIONS]
 
 OPTIONS:
-    -c, --code CODE     WeChat authorization code
-    -h, --help          Show this help message
-    -i, --interactive   Interactive mode - prompt for code input
+    -l, --login-code CODE     WeChat login authorization code
+    -m, --mobile-code CODE    WeChat mobile authorization code
+    -h, --help               Show this help message
+    -i, --interactive        Interactive mode - prompt for code input
     
 EXAMPLES:
-    $0 --code "0b1N85100T85rU15aE000urgLn2N851x"
+    $0 --login-code "0b1N85100T85rU15aE000urgLn2N851x" --mobile-code "abc123def456"
+    $0 -l "login_code_here" -m "mobile_code_here"
     $0 -i
-    $0  # Will prompt for code interactively
+    $0  # Will prompt for codes interactively
 
 Note: WeChat authorization codes expire within minutes of generation.
-Get a fresh code from your WeChat Mini Program development environment.
+Get fresh codes from your WeChat Mini Program development environment.
 EOF
 }
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -c|--code)
-            WECHAT_CODE="$2"
+        -l|--login-code)
+            WECHAT_LOGIN_CODE="$2"
+            shift 2
+            ;;
+        -m|--mobile-code)
+            WECHAT_MOBILE_CODE="$2"
             shift 2
             ;;
         -i|--interactive)
@@ -65,37 +77,63 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Function to get fresh WeChat code interactively
-get_fresh_wechat_code() {
-    echo -e "\n${YELLOW}⚠️  WeChat Authorization Code Required${NC}"
+# Function to get fresh WeChat codes interactively
+get_fresh_wechat_codes() {
+    echo -e "\n${YELLOW}⚠️  WeChat Authorization Codes Required${NC}"
     echo "WeChat authorization codes expire within minutes."
-    echo "Please obtain a fresh code from your WeChat Mini Program development environment."
+    echo "Please obtain fresh codes from your WeChat Mini Program development environment."
     echo ""
-    echo -e "${BLUE}Steps to get a fresh code:${NC}"
+    echo -e "${BLUE}Steps to get fresh codes:${NC}"
     echo "1. Go to WeChat Developer Tools"
     echo "2. Open your Mini Program project"
     echo "3. Use the development environment to trigger OAuth login"
-    echo "4. Copy the authorization code from the callback URL or logs"
+    echo "4. Copy the login authorization code from the callback URL or logs"
+    echo "5. Copy the mobile authorization code from the callback URL or logs"
     echo ""
     
+    # Get login code
     while true; do
-        read -p "Please enter fresh WeChat authorization code: " input_code
+        read -p "Please enter WeChat login authorization code: " input_login_code
         
-        if [[ -n "$input_code" && "$input_code" != "exit" && "$input_code" != "quit" ]]; then
-            # Basic validation - WeChat codes are typically alphanumeric and around 32 chars
-            if [[ ${#input_code} -ge 20 && "$input_code" =~ ^[A-Za-z0-9]+$ ]]; then
-                WECHAT_CODE="$input_code"
-                echo -e "${GREEN}✅ Code accepted: ${input_code:0:20}...${NC}"
-                return 0
+        if [[ -n "$input_login_code" && "$input_login_code" != "exit" && "$input_login_code" != "quit" ]]; then
+            # Basic validation - WeChat codes are typically alphanumeric and around 20+ chars
+            if [[ ${#input_login_code} -ge 10 && "$input_login_code" =~ ^[A-Za-z0-9]+$ ]]; then
+                WECHAT_LOGIN_CODE="$input_login_code"
+                echo -e "${GREEN}✅ Login code accepted: ${input_login_code:0:20}...${NC}"
+                break
             else
-                echo -e "${RED}❌ Invalid code format. WeChat codes are typically 20+ alphanumeric characters.${NC}"
+                echo -e "${RED}❌ Invalid code format. WeChat codes are typically 10+ alphanumeric characters.${NC}"
                 echo "Example format: 0b1N85100T85rU15aE000urgLn2N851x"
             fi
-        elif [[ "$input_code" == "exit" || "$input_code" == "quit" ]]; then
+        elif [[ "$input_login_code" == "exit" || "$input_login_code" == "quit" ]]; then
             echo -e "${YELLOW}Exiting test script.${NC}"
             exit 0
         else
-            echo -e "${RED}❌ Please enter a valid authorization code or 'exit' to quit.${NC}"
+            echo -e "${RED}❌ Please enter a valid login authorization code or 'exit' to quit.${NC}"
+        fi
+        
+        echo ""
+    done
+    
+    # Get mobile code
+    while true; do
+        read -p "Please enter WeChat mobile authorization code: " input_mobile_code
+        
+        if [[ -n "$input_mobile_code" && "$input_mobile_code" != "exit" && "$input_mobile_code" != "quit" ]]; then
+            # Basic validation - WeChat codes are typically alphanumeric and around 10+ chars
+            if [[ ${#input_mobile_code} -ge 10 && "$input_mobile_code" =~ ^[A-Za-z0-9]+$ ]]; then
+                WECHAT_MOBILE_CODE="$input_mobile_code"
+                echo -e "${GREEN}✅ Mobile code accepted: ${input_mobile_code:0:20}...${NC}"
+                return 0
+            else
+                echo -e "${RED}❌ Invalid code format. WeChat codes are typically 10+ alphanumeric characters.${NC}"
+                echo "Example format: abc123def456ghi789"
+            fi
+        elif [[ "$input_mobile_code" == "exit" || "$input_mobile_code" == "quit" ]]; then
+            echo -e "${YELLOW}Exiting test script.${NC}"
+            exit 0
+        else
+            echo -e "${RED}❌ Please enter a valid mobile authorization code or 'exit' to quit.${NC}"
         fi
         
         echo ""
@@ -106,21 +144,21 @@ get_fresh_wechat_code() {
 handle_code_expiration() {
     local error_message="$1"
     
-    if echo "$error_message" | grep -q "invalid code\|code expired\|40029"; then
-        echo -e "\n${YELLOW}⚠️  Authorization code has expired!${NC}"
+    if echo "$error_message" | grep -q "invalid code\|code expired\|40029\|微信小程序登录 Code 不能为空\|获取手机 Code 不能为空"; then
+        echo -e "\n${YELLOW}⚠️  Authorization codes have expired or are invalid!${NC}"
         echo "WeChat authorization codes are only valid for a few minutes after generation."
         
         while true; do
             echo ""
-            read -p "Would you like to enter a fresh authorization code? (y/n): " retry_choice
+            read -p "Would you like to enter fresh authorization codes? (y/n): " retry_choice
             
             case $retry_choice in
                 [Yy]*)
-                    get_fresh_wechat_code
-                    return 0  # Code refreshed successfully
+                    get_fresh_wechat_codes
+                    return 0  # Codes refreshed successfully
                     ;;
                 [Nn]*)
-                    echo -e "${YELLOW}Skipping WeChat login test due to expired code.${NC}"
+                    echo -e "${YELLOW}Skipping WeChat login test due to expired/invalid codes.${NC}"
                     return 1  # User chose not to retry
                     ;;
                 *)
@@ -316,14 +354,16 @@ test_wechat_login() {
             print_result "info" "Retry attempt $attempt/$max_retries"
         fi
         
-        print_result "info" "Using WeChat authorization code: ${WECHAT_CODE:0:20}..."
+        print_result "info" "Using WeChat login code: ${WECHAT_LOGIN_CODE:0:20}..."
+        print_result "info" "Using WeChat mobile code: ${WECHAT_MOBILE_CODE:0:20}..."
         
-        # Encode the WeChat code
-        local encoded_code=$(urlencode "$WECHAT_CODE")
+        # Encode the WeChat codes
+        local encoded_login_code=$(urlencode "$WECHAT_LOGIN_CODE")
+        local encoded_mobile_code=$(urlencode "$WECHAT_MOBILE_CODE")
         
-        # Make WeChat login request
+        # Make WeChat login request with updated parameters
         local wechat_response=$(curl -s -X GET \
-            "${BASE_URL}/wechat/login?code=${encoded_code}" \
+            "${BASE_URL}/wechat/login?loginCode=${encoded_login_code}&mobileCode=${encoded_mobile_code}" \
             -H "Accept: application/json" \
             -w "\n%{http_code}")
         
@@ -384,7 +424,7 @@ EOF
             
             # Check if this is a code expiration error and handle it
             if handle_code_expiration "$response_body"; then
-                # Code was refreshed, retry the login
+                # Codes were refreshed, retry the login
                 ((attempt++))
                 continue
             else
@@ -614,12 +654,13 @@ echo "🚀 Starting WeChat Login End-to-End Test Suite"
 echo "=================================================="
 echo "Base URL: $BASE_URL"
 
-# Check if we have a WeChat code, if not get one interactively
-if [ -z "$WECHAT_CODE" ] || [ "$INTERACTIVE_MODE" = "true" ]; then
-    get_fresh_wechat_code
+# Check if we have WeChat codes, if not get them interactively
+if [ -z "$WECHAT_LOGIN_CODE" ] || [ -z "$WECHAT_MOBILE_CODE" ] || [ "$INTERACTIVE_MODE" = "true" ]; then
+    get_fresh_wechat_codes
 fi
 
-echo "WeChat Code: ${WECHAT_CODE:0:20}..."
+echo "WeChat Login Code: ${WECHAT_LOGIN_CODE:0:20}..."
+echo "WeChat Mobile Code: ${WECHAT_MOBILE_CODE:0:20}..."
 echo "=================================================="
 
 run_all_tests
