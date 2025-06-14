@@ -35,7 +35,7 @@ public class WechatAuthenticationProvider implements AuthenticationProvider {
             return null;
         }
         WechatAuthenticationToken token = (WechatAuthenticationToken) authentication;
-        CustomUserDetails userDetails = weChatService.processWeChatLogin(token.getCode());
+        CustomUserDetails userDetails = weChatService.processWeChatLogin(token.getCode(), null);
         return createAuthenticatedToken(userDetails, authentication, userDetails);
     }
 

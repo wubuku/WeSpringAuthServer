@@ -2,16 +2,13 @@ package org.dddml.ffvtraceability.auth.service;
 
 import org.dddml.ffvtraceability.auth.dto.UserIdentificationDto;
 import org.dddml.ffvtraceability.auth.mapper.UserIdentificationMapper;
-import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 public class UserIdentificationService {
@@ -48,7 +45,7 @@ public class UserIdentificationService {
     @Transactional(readOnly = true)
     public List<UserIdentificationDto> getUserIdentifications(String username) {
         String sql = """
-                SELECT * FROM user_identifications 
+                SELECT * FROM user_identifications
                 WHERE username = ?
                 """;
         return jdbcTemplate.query(sql, new UserIdentificationMapper(), username);
@@ -64,14 +61,16 @@ public class UserIdentificationService {
      */
     @Transactional
     public void addUserIdentification(String username, String identificationType,
-                                      String identifier, boolean verified) {
-        OffsetDateTime now = OffsetDateTime.now();
+                                      String identifier, boolean verified, OffsetDateTime now) {
+        if (now == null) {
+            now = OffsetDateTime.now();
+        }
         String sql = """
-                INSERT INTO user_identifications 
-                (user_identification_type_id, username, identifier, verified, 
-                verified_at, created_at, updated_at) 
+                INSERT INTO user_identifications
+                (user_identification_type_id, username, identifier, verified,
+                verified_at, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (user_identification_type_id, username) DO UPDATE 
+                ON CONFLICT (user_identification_type_id, username) DO UPDATE
                 SET identifier = ?, verified = ?, verified_at = ?, updated_at = ?
                 """;
 

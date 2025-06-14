@@ -3,6 +3,7 @@ package org.dddml.ffvtraceability.auth.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.dddml.ffvtraceability.auth.config.AuthServerProperties;
 import org.dddml.ffvtraceability.auth.exception.AuthenticationException;
 import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
 import org.dddml.ffvtraceability.auth.service.SmsService;
@@ -29,7 +30,6 @@ import org.springframework.security.oauth2.server.authorization.token.DefaultOAu
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.stereotype.Controller;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -43,12 +43,16 @@ public class SocialLoginController {
     private static final String ERROR_URI = "https://datatracker.ietf.org/doc/html/rfc6749#section-5.2";
     private static final Logger logger = LoggerFactory.getLogger(SocialLoginController.class);
 
+
     private final WeChatService weChatService;
 
     private final SmsService smsService;
 
     @Autowired
-    private OAuth2TokenGenerator tokenGenerator;
+    private AuthServerProperties authServerProperties;
+
+    @Autowired
+    private OAuth2TokenGenerator<?> tokenGenerator;
 
     @Autowired
     private RegisteredClientRepository registeredClientRepository;
@@ -67,24 +71,24 @@ public class SocialLoginController {
         this.weChatService = weChatService;
     }
 
-    static <T extends OAuth2Token> OAuth2AccessToken accessToken(OAuth2Authorization.Builder builder, T token,
-                                                                 OAuth2TokenContext accessTokenContext) {
-
-        OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, token.getTokenValue(),
-                token.getIssuedAt(), token.getExpiresAt(), accessTokenContext.getAuthorizedScopes());
-        OAuth2TokenFormat accessTokenFormat = accessTokenContext.getRegisteredClient()
-                .getTokenSettings()
-                .getAccessTokenFormat();
-        builder.token(accessToken, (metadata) -> {
-            if (token instanceof ClaimAccessor claimAccessor) {
-                metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, claimAccessor.getClaims());
-            }
-            metadata.put(OAuth2Authorization.Token.INVALIDATED_METADATA_NAME, false);
-            metadata.put(OAuth2TokenFormat.class.getName(), accessTokenFormat.getValue());
-        });
-
-        return accessToken;
-    }
+//    static <T extends OAuth2Token> OAuth2AccessToken accessToken(OAuth2Authorization.Builder builder, T token,
+//                                                                 OAuth2TokenContext accessTokenContext) {
+//
+//        OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, token.getTokenValue(),
+//                token.getIssuedAt(), token.getExpiresAt(), accessTokenContext.getAuthorizedScopes());
+//        OAuth2TokenFormat accessTokenFormat = accessTokenContext.getRegisteredClient()
+//                .getTokenSettings()
+//                .getAccessTokenFormat();
+//        builder.token(accessToken, (metadata) -> {
+//            if (token instanceof ClaimAccessor claimAccessor) {
+//                metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, claimAccessor.getClaims());
+//            }
+//            metadata.put(OAuth2Authorization.Token.INVALIDATED_METADATA_NAME, false);
+//            metadata.put(OAuth2TokenFormat.class.getName(), accessTokenFormat.getValue());
+//        });
+//
+//        return accessToken;
+//    }
 
     /**
      * WeChat登录端点
@@ -99,19 +103,29 @@ public class SocialLoginController {
      * 原有的认证逻辑（weChatService.processWeChatLogin）保持不变。
      */
     @GetMapping("/wechat/login")
-    public void wechatLogin(@RequestParam("code") String code,
-                            HttpServletRequest request,
+    public void wechatLogin(@RequestParam(value = "clientId", defaultValue = "ffv-client") String clientId,
+                            @RequestParam("loginCode") String loginCode,
+                            @RequestParam("mobileCode") String mobileCode,
                             HttpServletResponse response) throws IOException {
+        if (loginCode == null || loginCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("微信小程序登录 Code 不能为空");
+        }
+        if (mobileCode == null || mobileCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("获取手机 Code 不能为空");
+        }
+
         try {
-            // 原有认证逻辑保持不变 - 处理WeChat登录
-            CustomUserDetails userDetails = weChatService.processWeChatLogin(code);
+            //处理WeChat登录
+            CustomUserDetails userDetails = weChatService.processWeChatLogin(loginCode, mobileCode);
+
+
             Authentication authentication = new UsernamePasswordAuthenticationToken(userDetails, null,
                     userDetails.getAuthorities());
 
             // 获取注册的客户端 - 原有逻辑保持不变
-            RegisteredClient registeredClient = registeredClientRepository.findByClientId("ffv-client");
+            RegisteredClient registeredClient = registeredClientRepository.findByClientId(clientId);
             if (registeredClient == null) {
-                throw new IllegalStateException("Registered client for WeChat not found");
+                throw new IllegalStateException("Registered client for WeChat not found, clientId:" + clientId);
             }
 
             // 关键修复：获取或创建AuthorizationServerContext - 解决"value cannot be null"问题
@@ -123,7 +137,7 @@ public class SocialLoginController {
                 final AuthorizationServerSettings settings = authorizationServerSettings != null ?
                         authorizationServerSettings :
                         AuthorizationServerSettings.builder()
-                                .issuer("http://localhost:9000")
+                                .issuer(authServerProperties.getIssuer())
                                 .build();
 
                 authorizationServerContext = new AuthorizationServerContext() {
@@ -215,7 +229,7 @@ public class SocialLoginController {
                     .principalName(userDetails.getUsername())
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizedScopes(Set.of("openid", "profile"))
-                    .attribute("code", code);
+                    .attribute("code", loginCode);
 
             // 使用专用方法添加tokens - 关键修复
             authorizationBuilder.accessToken(accessToken);

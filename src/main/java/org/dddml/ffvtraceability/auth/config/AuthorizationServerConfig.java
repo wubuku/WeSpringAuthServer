@@ -280,13 +280,14 @@ public class AuthorizationServerConfig {
     }
 
     /**
-     * 配置OAuth2授权服务器设置，包括重要的issuer设置
+     * 配置 OAuth2 授权服务器设置，包括重要的 issuer 设置
      * <p>
      * issuer字段的重要性：
-     * 1. JWT安全性 - 标识token的发行者，防止token被其他系统错误接受
-     * 2. RFC 7519标准 - JWT标准推荐包含iss（issuer）字段
-     * 3. 微服务环境 - 在多服务环境中识别token来源
-     * 4. 审计和调试 - 帮助跟踪token的发行者
+     * 1. JWT安全性 - 标识 token 的发行者，防止 token 被其他系统错误接受
+     * 2. RFC 7519标准 - JWT 标准推荐包含 iss（issuer）字段
+     * 3. 微服务环境 - 在多服务环境中识别 token 来源
+     * 4. 审计和调试 - 帮助跟踪 token 的发行者
+     * </p>
      */
     @Bean
     public AuthorizationServerSettings authorizationServerSettings() {
