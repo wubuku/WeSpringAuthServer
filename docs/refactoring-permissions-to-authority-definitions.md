@@ -456,9 +456,33 @@ DROP TABLE IF EXISTS permissions;
    - 第 71 行：移除 `DROP TABLE IF EXISTS permissions;`
    - 第 82-86 行：移除整个 `permissions` 表创建语句
 
-#### Shell 脚本 (1个)
-1. **`scripts/test-api-security.sh`** - 文档字符串更新
+#### Shell 脚本 (2个)
+1. **`scripts/test-api-security.sh`** - 注释更新
    - 第 46 行：注释文本中提到权限的地方可保持不变（这里是通用描述）
+
+2. **`scripts/test-method-security.sh`** - URL 路径更新
+   - 第 56 行：`test_page_access "/permission-management" "Access permission management page"`
+   - 需要修改为：`test_page_access "/authority-management" "Access authority management page"`
+
+#### 测试代码 (2个)
+1. **`src/test/java/org/dddml/ffvtraceability/auth/AuthServerApplicationTests.java`**
+   - 当前文件被注释掉，如果启用需要考虑权限相关测试用例的更新
+
+2. **`src/test/java/org/dddml/ffvtraceability/auth/PasswordEncoderTest.java`** 
+   - 不受影响（仅测试密码编码功能）
+
+#### 需要新增的测试文件
+1. **`src/test/java/org/dddml/ffvtraceability/auth/controller/AuthorityManagementApiControllerTest.java`**
+   - 为重构后的 AuthorityManagementApiController 添加完整的单元测试
+   - 测试所有 API 端点的功能正确性
+   - 验证数据库查询使用正确的表和字段
+
+2. **`src/test/java/org/dddml/ffvtraceability/auth/service/UserServiceTest.java`**
+   - 测试用户权限查询功能
+   - 验证 DTO 中的 authorities 字段正确映射
+
+3. **`src/test/java/org/dddml/ffvtraceability/auth/integration/AuthorityDefinitionsIntegrationTest.java`**
+   - 集成测试验证从 permissions 到 authority_definitions 的完整数据流
 
 #### 新增文件
 1. **`src/main/resources/db/migration/migrate-permissions-to-authority-definitions.sql`** - 数据迁移脚本
@@ -492,4 +516,181 @@ DROP TABLE IF EXISTS permissions;
 1. 完整的数据备份和迁移验证
 2. 全面的测试覆盖
 3. 分阶段实施和监控
-4. 团队成员的充分沟通和培训 
+4. 团队成员的充分沟通和培训
+
+## 附录
+
+### 附录A: 功能验证检查清单
+
+#### 数据库层验证
+- [ ] 确认 `authority_definitions` 表包含所有原 `permissions` 表数据
+- [ ] 验证数据记录数量一致性
+- [ ] 检查数据完整性（无重复、无遗漏）
+- [ ] 确认所有外键约束正常工作
+- [ ] 验证索引性能无显著下降
+
+#### API 层验证
+- [ ] 用户权限查询 API 正常工作
+- [ ] 组权限管理 API 功能完整
+- [ ] 权限批量更新功能正常
+- [ ] CSV 导入功能正常工作
+- [ ] 所有 HTTP 状态码正确返回
+- [ ] API 响应格式与预期一致
+
+#### 前端界面验证
+- [ ] 权限管理页面正常加载
+- [ ] 用户权限分配界面功能完整
+- [ ] 组权限配置界面正常工作
+- [ ] 权限树状结构显示正确
+- [ ] 权限搜索和筛选功能正常
+- [ ] 所有按钮和链接正常响应
+
+#### 权限验证功能
+- [ ] 用户登录后权限正确加载
+- [ ] 页面访问权限控制正常
+- [ ] API 访问权限验证有效
+- [ ] 角色权限继承正确
+- [ ] 权限变更后立即生效
+
+### 附录B: 回滚计划
+
+#### 紧急回滚步骤（发现严重问题时）
+
+**步骤1: 立即停止服务**
+```bash
+# 停止应用服务
+sudo systemctl stop spring-auth-server
+```
+
+**步骤2: 恢复数据库**
+```sql
+-- 从备份恢复 permissions 表
+DROP TABLE IF EXISTS permissions;
+CREATE TABLE permissions (
+    permission_id VARCHAR(50) NOT NULL PRIMARY KEY,
+    description VARCHAR(200),
+    enabled BOOLEAN DEFAULT NULL
+);
+
+-- 恢复数据（从备份文件）
+SOURCE /backup/permissions_backup_YYYY-MM-DD.sql;
+```
+
+**步骤3: 回滚代码版本**
+```bash
+# 切换到上一个稳定版本
+git checkout <previous-stable-commit>
+mvn clean package -DskipTests
+```
+
+**步骤4: 重启服务并验证**
+```bash
+sudo systemctl start spring-auth-server
+# 验证关键功能正常
+```
+
+#### 部分回滚选项
+- **仅回滚数据库**: 保持代码更新，只恢复数据库表
+- **仅回滚API**: 保持数据库更新，回滚代码到兼容版本
+- **渐进式回滚**: 逐个模块回滚，找出问题根源
+
+### 附录C: 详细测试用例
+
+#### 用户权限管理测试
+```bash
+# 测试用例1: 获取用户权限
+curl -X GET "http://localhost:9000/api/authorities/user/testuser" \
+  -H "Authorization: Bearer $TOKEN"
+# 预期: 返回用户权限列表，字段名为 authorities
+
+# 测试用例2: 批量更新用户权限
+curl -X POST "http://localhost:9000/api/authorities/user/batch" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "username": "testuser",
+    "granted": true,
+    "authorities": ["READ_USER", "WRITE_ORDER"]
+  }'
+# 预期: 权限更新成功，返回200状态码
+```
+
+#### 组权限管理测试
+```bash
+# 测试用例3: 获取组权限
+curl -X GET "http://localhost:9000/api/authorities/group/1" \
+  -H "Authorization: Bearer $TOKEN"
+# 预期: 返回组权限列表
+
+# 测试用例4: 更新组权限
+curl -X POST "http://localhost:9000/api/authorities/group/batch" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "groupId": 1,
+    "granted": true,
+    "authorities": ["READ_USER", "READ_GROUP"]
+  }'
+```
+
+#### 基础权限查询测试
+```bash
+# 测试用例5: 获取所有基础权限
+curl -X GET "http://localhost:9000/api/authorities/base" \
+  -H "Authorization: Bearer $TOKEN"
+# 预期: 返回所有 authority_definitions 表中的权限
+```
+
+#### 数据一致性测试
+```sql
+-- 测试用例6: 验证数据迁移完整性
+SELECT COUNT(*) FROM authority_definitions; 
+-- 应该等于原 permissions 表的记录数
+
+-- 测试用例7: 验证权限引用一致性
+SELECT COUNT(*) FROM user_authorities ua 
+LEFT JOIN authority_definitions ad ON ua.authority = ad.authority_id 
+WHERE ad.authority_id IS NULL;
+-- 结果应该为 0（无孤立引用）
+```
+
+### 附录D: 性能基准测试
+
+#### 测试脚本示例
+```bash
+#!/bin/bash
+# 性能对比测试脚本
+
+echo "测试权限查询性能..."
+echo "重构前 - permissions 表查询:"
+time mysql -u $DB_USER -p$DB_PASS -e "
+SELECT p.permission_id FROM permissions p WHERE p.enabled IS NULL OR p.enabled = true;
+" $DB_NAME
+
+echo "重构后 - authority_definitions 表查询:"
+time mysql -u $DB_USER -p$DB_PASS -e "
+SELECT ad.authority_id FROM authority_definitions ad WHERE ad.enabled IS NULL OR ad.enabled = true;
+" $DB_NAME
+```
+
+#### 负载测试指标
+- API 响应时间 < 200ms
+- 并发用户 100+ 无性能下降
+- 数据库查询时间无显著增加
+- 内存使用量保持稳定
+
+### 附录E: 项目依赖关系图
+
+```
+数据库迁移 → SQL查询更新 → DTO字段更新 → Controller更新 → 前端API调用更新 → 前端界面更新
+     ↓              ↓              ↓             ↓                ↓                ↓
+   必须最先      可以并行        影响API       需要测试        与后端协调        用户可见
+```
+
+**关键依赖关系**:
+1. 数据库迁移必须在代码部署前完成
+2. DTO 更新和 Controller 更新必须同步
+3. 前端更新必须与后端 API 变更协调
+4. 测试应该在每个阶段完成后进行
+
+这份文档现在提供了**完整的实施指导**，具备了优秀重构文档应有的所有要素! 
