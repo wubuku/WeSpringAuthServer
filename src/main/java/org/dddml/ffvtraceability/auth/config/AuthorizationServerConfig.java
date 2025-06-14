@@ -245,9 +245,16 @@ public class AuthorizationServerConfig {
         RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
 
         // 2. 构建 RSAKey（包含公钥和私钥）
+        // 获取配置的密钥ID，如果没有配置则使用默认值
+        String keyId = jwtKeyProperties.getKeyAlias() != null 
+            ? jwtKeyProperties.getKeyAlias() + "-jwk" 
+            : "ffv-jwt-key-2025";
+        
+        logger.info("JWT密钥ID设置为: {}", keyId);
+        
         RSAKey rsaKey = new RSAKey.Builder(publicKey)
                 .privateKey(privateKey)  // 私钥仅用于签名，不对外暴露
-                .keyID(UUID.randomUUID().toString())  // 唯一标识符（用于密钥轮换）
+                .keyID(keyId)  // 使用稳定的密钥ID，基于配置生成
                 .build();
 
         // 3. 包装为 JWKSet
