@@ -93,7 +93,8 @@ public class SocialLoginController {
 
     private static final Logger logger = LoggerFactory.getLogger(SocialLoginController.class);
 
-    private final WeChatService weChatService;
+    @Autowired
+    private WeChatService weChatService;
 
     @Autowired
     private AuthServerProperties authServerProperties;
@@ -112,29 +113,6 @@ public class SocialLoginController {
 
     @Autowired
     private AuthorizationServerSettings authorizationServerSettings;
-
-    public SocialLoginController(WeChatService weChatService) {
-        this.weChatService = weChatService;
-    }
-
-//    static <T extends OAuth2Token> OAuth2AccessToken accessToken(OAuth2Authorization.Builder builder, T token,
-//                                                                 OAuth2TokenContext accessTokenContext) {
-//
-//        OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, token.getTokenValue(),
-//                token.getIssuedAt(), token.getExpiresAt(), accessTokenContext.getAuthorizedScopes());
-//        OAuth2TokenFormat accessTokenFormat = accessTokenContext.getRegisteredClient()
-//                .getTokenSettings()
-//                .getAccessTokenFormat();
-//        builder.token(accessToken, (metadata) -> {
-//            if (token instanceof ClaimAccessor claimAccessor) {
-//                metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, claimAccessor.getClaims());
-//            }
-//            metadata.put(OAuth2Authorization.Token.INVALIDATED_METADATA_NAME, false);
-//            metadata.put(OAuth2TokenFormat.class.getName(), accessTokenFormat.getValue());
-//        });
-//
-//        return accessToken;
-//    }
 
     /**
      * WeChat登录端点
