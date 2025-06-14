@@ -58,8 +58,8 @@ public class WeChatService {
         String mobileNumber = null;
         if (mobileCode != null && !mobileCode.isEmpty()) {
             try {
-                WxMaPhoneNumberInfo wxMaPhoneNumberInfo = wxMaService.getUserService().getPhoneNumber(loginCde);
-                mobileNumber=wxMaPhoneNumberInfo.getPhoneNumber();
+                WxMaPhoneNumberInfo wxMaPhoneNumberInfo = wxMaService.getUserService().getPhoneNumber(mobileCode);
+                mobileNumber = wxMaPhoneNumberInfo.getPhoneNumber();
             } catch (WxErrorException e) {
                 throw new AuthenticationException("Failed to get user mobile info:" + e.getMessage(), e);
             }
@@ -157,8 +157,8 @@ public class WeChatService {
     /**
      * Create a new user from WeChat authentication
      *
-     * @param unionId The union ID from WeChat
-     * @param openId  The OpenID from WeChat
+     * @param unionId      The union ID from WeChat
+     * @param openId       The OpenID from WeChat
      * @param mobileNumber The mobile number from WeChat
      * @return The authentication token
      */
@@ -185,7 +185,10 @@ public class WeChatService {
         }
         // Store the mobile number if available
         if (mobileNumber != null && !mobileNumber.isEmpty()) {
-            userIdentificationService.addUserIdentification(username, "MOBILE_NUMBER", mobileNumber, true, now);
+            Optional<String> usernameByMobileNumber = userIdentificationService.findUsernameByIdentifier("MOBILE_NUMBER", openId);
+            if (usernameByMobileNumber.isEmpty()) {
+                userIdentificationService.addUserIdentification(username, "MOBILE_NUMBER", mobileNumber, true, now);
+            }
         }
         // Authenticate the user
         return username;
