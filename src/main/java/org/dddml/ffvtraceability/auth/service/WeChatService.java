@@ -116,25 +116,14 @@ public class WeChatService {
                         if (!hasUnionId) {
                             // 不需要再次查询UnionID是否已关联其他用户，因为在步骤1已经检查过
                             // 如果UnionID关联了其他用户，那么username已经在步骤1中被设置了
-                            if (!userByUnionId.isPresent()) {
-                                // 添加UnionID到当前用户
-                                userIdentificationService.addUserIdentification(username, "WECHAT_UNIONID", unionId, true);
-                                logger.info("Added UnionID to existing user: username={}, UnionID={}", username, unionId);
-                            }
+                            // 添加UnionID到当前用户
+                            userIdentificationService.addUserIdentification(username, "WECHAT_UNIONID", unionId, true);
+                            logger.info("Added UnionID to existing user: username={}, UnionID={}", username, unionId);
                         }
                     }
                 }
             }
-            // 3. 处理UnionID和OpenID指向不同用户的情况
-            if (unionId != null && !unionId.isEmpty() && userByUnionId.isPresent() && userByOpenId.isPresent() && !userByUnionId.get().equals(userByOpenId.get())) {
-                // UnionID和OpenID指向不同用户，发出警告
-                logger.warn("WeChat identity conflict! UnionID={} is associated with user={}, " + "while OpenID={} is associated with user={}", unionId, userByUnionId.get(), openId, userByOpenId.get());
-
-                // 使用UnionID对应的用户
-                username = userByUnionId.get();
-                logger.info("Using UnionID user in conflict case: username={}", username);
-            }
-            // 4. 如果仍未找到用户，创建新用户
+            // 3. 如果仍未找到用户，创建新用户
             if (username == null) {
                 username = createNewWeChatUser(jscode2SessionResult);
             }
