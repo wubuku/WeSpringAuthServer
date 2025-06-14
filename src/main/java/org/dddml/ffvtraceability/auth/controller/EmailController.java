@@ -20,8 +20,8 @@ public class EmailController {
     public void hello(@RequestParam(required = false) String mailTo) {
         if (mailTo == null || mailTo.isBlank()) {
             mailTo = "8745138@qq.com";
-        }else{
-            mailTo=mailTo.trim();
+        } else {
+            mailTo = mailTo.trim();
         }
         emailService.sendTextMail(mailTo, "Hello", "Hello, this is a test email.");
     }

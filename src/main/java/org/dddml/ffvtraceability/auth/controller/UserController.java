@@ -1,8 +1,6 @@
 package org.dddml.ffvtraceability.auth.controller;
 
 import org.dddml.ffvtraceability.auth.config.PasswordTokenProperties;
-import org.dddml.ffvtraceability.auth.dto.PasswordTokenDto;
-import org.dddml.ffvtraceability.auth.dto.PasswordVo;
 import org.dddml.ffvtraceability.auth.dto.PreRegisterUserDto;
 import org.dddml.ffvtraceability.auth.dto.UserDto;
 import org.dddml.ffvtraceability.auth.exception.BusinessException;

@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.config.AuthServerProperties;
 import org.dddml.ffvtraceability.auth.exception.AuthenticationException;
 import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
-import org.dddml.ffvtraceability.auth.service.SmsService;
 import org.dddml.ffvtraceability.auth.service.WeChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,12 +24,14 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContext;
 import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContextHolder;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
-import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
 import org.springframework.security.oauth2.server.authorization.token.DefaultOAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.io.IOException;
 import java.util.Base64;
@@ -38,6 +39,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * 社交登录控制器
+ * 目前主要处理微信登录相关的功能
+ * <p>
+ * 包含的功能：
+ * - 微信小程序登录
+ * - 微信登录令牌刷新
+ */
 @Controller
 public class SocialLoginController {
     private static final String ERROR_URI = "https://datatracker.ietf.org/doc/html/rfc6749#section-5.2";
@@ -45,8 +54,6 @@ public class SocialLoginController {
 
 
     private final WeChatService weChatService;
-
-    private final SmsService smsService;
 
     @Autowired
     private AuthServerProperties authServerProperties;
@@ -66,8 +73,7 @@ public class SocialLoginController {
     @Autowired
     private AuthorizationServerSettings authorizationServerSettings;
 
-    public SocialLoginController(SmsService smsService, WeChatService weChatService) {
-        this.smsService = smsService;
+    public SocialLoginController(WeChatService weChatService) {
         this.weChatService = weChatService;
     }
 
@@ -520,35 +526,4 @@ public class SocialLoginController {
         }
     }
 
-    /**
-     * Send SMS verification code
-     */
-    @PostMapping("/api/sms/send-code")
-    @ResponseBody
-    public ResponseEntity<Map<String, Object>> sendSmsCode(@RequestBody Map<String, String> request) {
-        String phoneNumber = request.get("phoneNumber");
-        Map<String, Object> response = new HashMap<>();
-
-        if (phoneNumber == null || phoneNumber.isEmpty()) {
-            response.put("success", false);
-            response.put("message", "Phone number is required");
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        // Generate a verification code
-        String code = smsService.generateVerificationCode();
-
-        // Send the verification code
-        boolean sent = smsService.sendVerificationCode(phoneNumber, code);
-
-        if (sent) {
-            response.put("success", true);
-            response.put("message", "Verification code sent");
-            return ResponseEntity.ok(response);
-        } else {
-            response.put("success", false);
-            response.put("message", "Failed to send verification code");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-    }
 }

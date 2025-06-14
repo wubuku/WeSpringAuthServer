@@ -123,9 +123,7 @@ public class PasswordTokenController {
 //        return passwordTokenDto;
 //    }
     private void sendResetPasswordEmail(String mailTo, String token) {
-        StringBuilder sbLink = new StringBuilder();
-        sbLink.append(passwordTokenProperties.getCreatePasswordUrl()).append("?").append("token=").append(token).append("&type=reset");
-        StringBuilder sbHtml = new StringBuilder("""
+        String sbHtml = """
                 <div style="max-width: 600px; padding: 46px; background: white; outline: 1px #D4D4D8 solid; margin: 0 auto; font-family: Inter;">
                 <img style="width: 165px; height: 50px;" src="cid:logo" alt="Logo">
                 <div style="margin: 24px 0;">
@@ -133,36 +131,35 @@ public class PasswordTokenController {
                 <p style="font-size: 16px; line-height: 24px; margin: 0;">You have requested to reset your password.Use the link below to create a new password.
                 </p>
                 </div>
-                """);
-        sbHtml.append("<a href='");
-        sbHtml.append(sbLink);
-        sbHtml.append("""
-                ' target='_blank'
-                    style="display: inline-block;
-                    padding: 8px 16px;
-                    background: #15803D;
-                    color: #FFFFFF;
-                    text-decoration: none;
-                    border-radius: 4px;
-                    font-size: 16px;
-                    line-height: 24px;
-                    margin: 16px 0;">
-                    Reset password
-                    </a>
-                  <hr style="border: 0;
-                            height: 0;
-                            border-top: 1px solid #D4D4D8;
-                            margin: 24px 0;">
-                  <div style="text-align: center; margin-top: 24px;">
-                      <span style="font-size: 14px;">Powered by</span>
-                      <img style="width: 96px; height: 28px; vertical-align: middle;" src="cid:blueforce" alt="Blueforce">
-                  </div>
-                </div>
-                """);
+                """ + "<a href='" +
+                passwordTokenProperties.getCreatePasswordUrl() + "?" + "token=" + token + "&type=reset" +
+                """
+                        ' target='_blank'
+                            style="display: inline-block;
+                            padding: 8px 16px;
+                            background: #15803D;
+                            color: #FFFFFF;
+                            text-decoration: none;
+                            border-radius: 4px;
+                            font-size: 16px;
+                            line-height: 24px;
+                            margin: 16px 0;">
+                            Reset password
+                            </a>
+                          <hr style="border: 0;
+                                    height: 0;
+                                    border-top: 1px solid #D4D4D8;
+                                    margin: 24px 0;">
+                          <div style="text-align: center; margin-top: 24px;">
+                              <span style="font-size: 14px;">Powered by</span>
+                              <img style="width: 96px; height: 28px; vertical-align: middle;" src="cid:blueforce" alt="Blueforce">
+                          </div>
+                        </div>
+                        """;
         Map<String, ClassPathResource> inlineResources = new HashMap<>();
         inlineResources.put("logo", new ClassPathResource("images/logo.png"));
         inlineResources.put("blueforce", new ClassPathResource("images/blueforce.png"));
-        emailService.sendHtmlMail(mailTo, "Password Reset", sbHtml.toString(), inlineResources);
+        emailService.sendHtmlMail(mailTo, "Password Reset", sbHtml, inlineResources);
     }
 
     /**
