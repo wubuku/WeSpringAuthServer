@@ -79,6 +79,12 @@ CREATE TABLE authority_definitions (
     enabled BOOLEAN DEFAULT NULL
 );
 
+-- 基础权限表（旧，todo 在重构 Java 代码后可以移除）
+CREATE TABLE permissions (
+    permission_id VARCHAR(50) NOT NULL PRIMARY KEY,
+    description VARCHAR(200),
+    enabled BOOLEAN DEFAULT NULL
+);
 
 --
 -- OAuth Server Schema

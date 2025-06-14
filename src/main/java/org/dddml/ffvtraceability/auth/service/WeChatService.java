@@ -129,20 +129,7 @@ public class WeChatService {
                     logger.info("Found user by OpenID={},username={}", openId, username);
                 }
             }
-            // 3. 处理UnionID和OpenID指向不同用户的情况
-            if (unionId != null
-                    && !unionId.isEmpty()
-                    && usernameByUnionId.isPresent()
-                    && usernameByOpenId.isPresent()
-                    && !usernameByUnionId.get().equals(usernameByOpenId.get())) {
-                // UnionID和OpenID指向不同用户，发出警告
-                logger.warn("WeChat identity conflict! UnionID={} is associated with user={},while OpenID={} is associated with user={}",
-                        unionId, usernameByUnionId.get(), openId, usernameByOpenId.get());
-                // 使用UnionID对应的用户
-                username = usernameByUnionId.get();
-                logger.info("Using UnionID user in conflict case: username={}", username);
-            }
-            // 4. 如果仍未找到用户，创建新用户
+            // 3. 如果仍未找到用户，创建新用户
             if (username == null) {
                 username = createNewWeChatUser(unionId, openId, mobileNumber, now);
             }

@@ -46,7 +46,7 @@ public class WechatAuthenticationProvider implements AuthenticationProvider {
 
     /**
      * Create an authenticated token for the phone number
-     * This is used after verification of SMS code     *
+     * This is used after verification of SMS code
      *
      * @return An authenticated token
      */
