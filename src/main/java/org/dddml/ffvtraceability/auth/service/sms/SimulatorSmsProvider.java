@@ -9,13 +9,13 @@ import org.slf4j.LoggerFactory;
  */
 public class SimulatorSmsProvider implements SmsProvider {
     private static final Logger logger = LoggerFactory.getLogger(SimulatorSmsProvider.class);
-    
+
     @Override
     public boolean sendVerificationCode(String phoneNumber, String code) {
         logger.info("SIMULATOR: Would send verification code {} to phone number {}", code, phoneNumber);
         return true;
     }
-    
+
     @Override
     public String getProviderName() {
         return "simulator";

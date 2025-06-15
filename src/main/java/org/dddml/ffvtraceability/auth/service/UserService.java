@@ -49,49 +49,47 @@ public class UserService {
     }
 
     public void sendCreatePasswordEmail(String mailTo, String token) {
-        StringBuilder sbLink = new StringBuilder();
-        sbLink.append(passwordTokenProperties.getCreatePasswordUrl()).append("?").append("token=").append(token).append("&type=register");
-        StringBuilder sbHtml = new StringBuilder("""
+        String sbLink = passwordTokenProperties.getCreatePasswordUrl() + "?" + "token=" + token + "&type=register";
+        String sbHtml = """
                 <div style="max-width: 600px; padding: 46px; background: white; outline: 1px #D4D4D8 solid; margin: 0 auto; font-family: Inter;">
                 <img style="width: 165px; height: 50px;" src="cid:logo" alt="Logo">
                 <div style="margin: 24px 0;">
                 <h1 style="font-size: 24px; font-weight: 600; margin: 0 0 8px 0;">Finish Setting up Your Account</h1>
-                <p style="font-size: 16px; line-height: 24px; margin: 0;">Use the link below to complete your account setup. It is valid for """);
-        sbHtml.append(" ").append(passwordTokenProperties.getExpireInHours()).append(" ");
-        sbHtml.append(""" 
-                hours.<br> If it expires, contact the admin to request a new one.</p>
-                </div>
-                <a href='""");
-        sbHtml.append(sbLink);
-        sbHtml.append("""
-                ' target='_blank'
-                    style="display: inline-block;
-                    padding: 8px 16px;
-                    background: #15803D;
-                    color: #FFFFFF;
-                    text-decoration: none;
-                    border-radius: 4px;
-                    font-size: 16px;
-                    line-height: 24px;
-                    margin: 16px 0;">
-                    Finish set-up
-                    </a>
-                  <hr style="border: 0;
-                            height: 0;
-                            border-top: 1px solid #D4D4D8;
-                            margin: 24px 0;">
-                  <div style="text-align: center; margin-top: 24px;">
-                      <span style="font-size: 14px;">Powered by</span>
-                      <img style="width: 96px; height: 28px; vertical-align: middle;" src="cid:blueforce" alt="Blueforce">
-                  </div>
-                </div>
-                """);
+                <p style="font-size: 16px; line-height: 24px; margin: 0;">Use the link below to complete your account setup. It is valid for """ + " " + passwordTokenProperties.getExpireInHours() + " " +
+                """ 
+                        hours.<br> If it expires, contact the admin to request a new one.</p>
+                        </div>
+                        <a href='""" +
+                sbLink +
+                """
+                        ' target='_blank'
+                            style="display: inline-block;
+                            padding: 8px 16px;
+                            background: #15803D;
+                            color: #FFFFFF;
+                            text-decoration: none;
+                            border-radius: 4px;
+                            font-size: 16px;
+                            line-height: 24px;
+                            margin: 16px 0;">
+                            Finish set-up
+                            </a>
+                          <hr style="border: 0;
+                                    height: 0;
+                                    border-top: 1px solid #D4D4D8;
+                                    margin: 24px 0;">
+                          <div style="text-align: center; margin-top: 24px;">
+                              <span style="font-size: 14px;">Powered by</span>
+                              <img style="width: 96px; height: 28px; vertical-align: middle;" src="cid:blueforce" alt="Blueforce">
+                          </div>
+                        </div>
+                        """;
 //        sbHtml.append("<br><br><a href='");
 //        sbHtml.append(sbLink.toString()).append("'>").append(sbLink.toString()).append("</a>");
         Map<String, ClassPathResource> inlineResources = new HashMap<>();
         inlineResources.put("logo", new ClassPathResource("images/logo.png"));
         inlineResources.put("blueforce", new ClassPathResource("images/blueforce.png"));
-        emailService.sendHtmlMail(mailTo, "Finish Setting up Your Account", sbHtml.toString(), inlineResources);
+        emailService.sendHtmlMail(mailTo, "Finish Setting up Your Account", sbHtml, inlineResources);
     }
 
     @Transactional(readOnly = true)

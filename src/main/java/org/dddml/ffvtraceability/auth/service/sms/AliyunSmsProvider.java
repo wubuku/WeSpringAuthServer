@@ -19,21 +19,19 @@ import java.util.Map;
  */
 public class AliyunSmsProvider implements SmsProvider {
     private static final Logger logger = LoggerFactory.getLogger(AliyunSmsProvider.class);
-    
-    private final IAcsClient client;
-    private final SmsProperties.Aliyun config;
-    private final ObjectMapper objectMapper;
-    
     private static final String DOMAIN = "dysmsapi.aliyuncs.com";
     private static final String ACTION = "SendSms";
     private static final String VERSION = "2017-05-25";
-    
+    private final IAcsClient client;
+    private final SmsProperties.Aliyun config;
+    private final ObjectMapper objectMapper;
+
     public AliyunSmsProvider(IAcsClient client, SmsProperties.Aliyun config) {
         this.client = client;
         this.config = config;
         this.objectMapper = new ObjectMapper();
     }
-    
+
     @Override
     public boolean sendVerificationCode(String phoneNumber, String code) {
         CommonRequest request = new CommonRequest();
@@ -41,35 +39,35 @@ public class AliyunSmsProvider implements SmsProvider {
         request.setSysDomain(DOMAIN);
         request.setSysVersion(VERSION);
         request.setSysAction(ACTION);
-        
+
         // Set SMS parameters
         Map<String, String> templateParam = new HashMap<>();
         templateParam.put("code", code);
-        
+
         try {
             String templateParamJson = objectMapper.writeValueAsString(templateParam);
-            
+
             request.putQueryParameter("RegionId", config.getRegion());
             request.putQueryParameter("PhoneNumbers", phoneNumber);
             request.putQueryParameter("SignName", config.getSignName());
             request.putQueryParameter("TemplateCode", config.getTemplateCode());
             request.putQueryParameter("TemplateParam", templateParamJson);
-            
+
             CommonResponse response = client.getCommonResponse(request);
             String responseData = response.getData();
-            
+
             // Parse response
             JsonNode root = objectMapper.readTree(responseData);
             String code1 = root.path("Code").asText();
-            
+
             boolean success = "OK".equalsIgnoreCase(code1);
-            
+
             if (success) {
                 logger.info("Successfully sent SMS via Aliyun to {}, response: {}", phoneNumber, responseData);
             } else {
                 logger.error("Failed to send SMS via Aliyun to {}, response: {}", phoneNumber, responseData);
             }
-            
+
             return success;
         } catch (ClientException e) {
             logger.error("Aliyun SMS client exception", e);
@@ -79,7 +77,7 @@ public class AliyunSmsProvider implements SmsProvider {
             return false;
         }
     }
-    
+
     @Override
     public String getProviderName() {
         return "aliyun";

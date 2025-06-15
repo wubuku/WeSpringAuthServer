@@ -5,21 +5,23 @@ package org.dddml.ffvtraceability.auth.service;
  * Different implementations can be provided for different SMS providers
  */
 public interface SmsService {
-    
+
     /**
      * Send a verification code to the phone number
+     *
      * @param phoneNumber The phone number to send the code to
-     * @param code The verification code to send
+     * @param code        The verification code to send
      * @return true if the SMS was sent successfully
      */
     boolean sendVerificationCode(String phoneNumber, String code);
-    
+
     /**
      * Generate a verification code
+     *
      * @return The generated verification code
      */
     String generateVerificationCode();
-    
+
     /**
      * Verify a code for a phone number
      * @param phoneNumber The phone number

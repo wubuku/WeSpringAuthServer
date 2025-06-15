@@ -23,117 +23,183 @@ import java.util.UUID;
 public class WeChatService {
     private static final Logger logger = LoggerFactory.getLogger(WeChatService.class);
 
+    // Constants
+    private static final String WECHAT_OPENID_TYPE = "WECHAT_OPENID";
+    private static final String WECHAT_UNIONID_TYPE = "WECHAT_UNIONID";
+    private static final String WECHAT_MOBILE_TYPE = "WECHAT_MOBILE_NUMBER";
+    private static final String USERNAME_PREFIX = "wx_";
+    private static final int USERNAME_SUFFIX_LENGTH = 20; // Increased from 10 to 20 for better uniqueness
+
+    // Error messages
+    private static final String ERROR_SESSION_INFO = "Failed to get WeChat session info:";
+    private static final String ERROR_MOBILE_INFO = "Failed to get user mobile info:";
+    private static final String ERROR_OPENID_EMPTY = "Failed to get WeChat session info: OpenID is empty";
+    private static final String ERROR_AUTHENTICATION = "Failed to authenticate with WeChat: ";
+
     private final WxMaService wxMaService;
-    //private final WeChatConfig weChatConfig;
     private final UserService userService;
     private final UserIdentificationService userIdentificationService;
 
     public WeChatService(WxMaService wxMaService, UserService userService, UserIdentificationService userIdentificationService) {
         this.wxMaService = wxMaService;
-        //this.weChatConfig = weChatConfig;
         this.userService = userService;
         this.userIdentificationService = userIdentificationService;
-    }
-
-
-    private String findUsernameByUnionId(String unionId, String openId) {
-        return null;
     }
 
     /**
      * Process WeChat login
      *
-     * @param loginCode The authorization code from WeChat
+     * @param loginCode  The authorization code from WeChat
+     * @param mobileCode The mobile authorization code from WeChat
      * @return The authenticated user
      */
     @Transactional
     public CustomUserDetails processWeChatLogin(String loginCode, String mobileCode) {
-        WxMaJscode2SessionResult jscode2SessionResult = null;
         try {
-            // Get access token, OpenID and UnionID (if available) from WeChat
-            jscode2SessionResult = wxMaService.jsCode2SessionInfo(loginCode);
-        } catch (WxErrorException e) {
-            throw new AuthenticationException("Failed to get WeChat session info:" + e.getMessage(), e);
-        }
-        String mobileNumber = null;
-        if (mobileCode != null && !mobileCode.isEmpty()) {
-            try {
-                WxMaPhoneNumberInfo wxMaPhoneNumberInfo = wxMaService.getUserService().getPhoneNumber(mobileCode);
-                mobileNumber = wxMaPhoneNumberInfo.getPhoneNumber();
-            } catch (WxErrorException e) {
-                throw new AuthenticationException("Failed to get user mobile info:" + e.getMessage(), e);
-            }
-        }
-        try {
-            String openId = jscode2SessionResult.getOpenid();
-            if (openId == null || openId.isEmpty()) {
-                throw new AuthenticationException("Failed to get WeChat session info: OpenID is empty");
-            }
-            String unionId = jscode2SessionResult.getUnionid();
-            // 记录当前登录的 OpenID 和 UnionID 信息
-            logger.info("Processing WeChat login: OpenID={}, UnionID={}", openId, unionId);
+            // Get session info from WeChat
+            WxMaJscode2SessionResult sessionResult = getWeChatSessionInfo(loginCode);
+            String mobileNumber = getMobileNumber(mobileCode);
 
-            // 确定用户账号的逻辑
-            String username = null;
-            OffsetDateTime now = OffsetDateTime.now();
-            // 1. 优先使用 UnionID 查找用户
-            if (unionId != null && !unionId.isEmpty()) {
-                Optional<String> usernameByUnionId = userIdentificationService.findUsernameByIdentifier("WECHAT_UNIONID", unionId);
-                if (usernameByUnionId.isPresent()) {
-                    username = usernameByUnionId.get();
-                    logger.info("Found user by UnionID={},username={}", unionId, username);
-                    // 获取用户所有标识并缓存
-                    List<UserIdentificationDto> userIdentifications = userIdentificationService.getUserIdentifications(username);
-                    //userIdentificationsCache.put(username, userIdentifications);
+            // Extract OpenID and UnionID
+            String openId = validateAndExtractOpenId(sessionResult);
+            String unionId = sessionResult.getUnionid();
 
-                    // 检查该用户是否已关联其他 OpenID
-                    boolean hasOpenIdConflict = false;
-                    List<String> conflictingOpenIds = new ArrayList<>();
+            logger.debug("Processing WeChat login: OpenID={}, UnionID={}", openId, unionId);
 
-                    for (UserIdentificationDto identification : userIdentifications) {
-                        if ("WECHAT_OPENID".equals(identification.getUserIdentificationTypeId())
-                                && !openId.equals(identification.getIdentifier())) {
-                            // 该用户已关联了不同的 OpenID
-                            hasOpenIdConflict = true;
-                            conflictingOpenIds.add(identification.getIdentifier());
-                        }
-                    }
-                    if (hasOpenIdConflict) {
-                        // 详细记录冲突信息
-                        logger.warn("⚠️ OpenID Conflict Detected: User [{}] has other OpenIDs different from current", username);
-                        logger.warn("  - Current login OpenID: {}", openId);
-                        logger.warn("  - User's existing OpenIDs: {}", String.join(", ", conflictingOpenIds));
-                        logger.warn("  - UnionID: {}", unionId);
-                    }
-                    // 如果没有关联当前OpenID，则添加
-                    if (!hasOpenIdConflict) {
-                        boolean hasOpenId = userIdentifications.stream().anyMatch(id ->
-                                "WECHAT_OPENID".equals(id.getUserIdentificationTypeId()) && openId.equals(id.getIdentifier()));
-                        if (!hasOpenId) {
-                            userIdentificationService.addUserIdentification(username, "WECHAT_OPENID", openId, true, now);
-                            logger.info("Added OpenID to existing user: username={}, OpenID={}", username, openId);
-                        }
-                    }
-                }
-            }
-            // 2. 如果没有找到 UnionID 对应的用户，使用 OpenID 查找
-            if (username == null) {
-                Optional<String> usernameByOpenId = userIdentificationService.findUsernameByIdentifier("WECHAT_OPENID", openId);
-                if (usernameByOpenId.isPresent()) { //如果使用 OpenId 找到了 username
-                    username = usernameByOpenId.get();
-                    logger.info("Found user by OpenID={},username={}", openId, username);
-                }
-            }
-            // 3. 如果仍未找到用户，创建新用户
-            if (username == null) {
-                username = createNewWeChatUser(unionId, openId, mobileNumber, now);
-            }
-            //这里可能会抛出 UsernameNotFoundException 异常
+            // Find or create user
+            String username = findOrCreateUser(openId, unionId, mobileNumber);
+
             return userService.getUserDetails(username);
         } catch (Exception e) {
             logger.error("WeChat authentication error", e);
-            throw new AuthenticationException("Failed to authenticate with WeChat: " + e.getMessage());
+            throw new AuthenticationException(ERROR_AUTHENTICATION + e.getMessage());
         }
+    }
+
+    /**
+     * Get WeChat session info from login code
+     */
+    private WxMaJscode2SessionResult getWeChatSessionInfo(String loginCode) {
+        try {
+            return wxMaService.jsCode2SessionInfo(loginCode);
+        } catch (WxErrorException e) {
+            throw new AuthenticationException(ERROR_SESSION_INFO + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get mobile number from mobile code
+     */
+    private String getMobileNumber(String mobileCode) {
+        if (mobileCode == null || mobileCode.isEmpty()) {
+            return null;
+        }
+
+        try {
+            WxMaPhoneNumberInfo phoneInfo = wxMaService.getUserService().getPhoneNumber(mobileCode);
+            return phoneInfo.getPhoneNumber();
+        } catch (WxErrorException e) {
+            throw new AuthenticationException(ERROR_MOBILE_INFO + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Validate and extract OpenID from session result
+     */
+    private String validateAndExtractOpenId(WxMaJscode2SessionResult sessionResult) {
+        String openId = sessionResult.getOpenid();
+        if (openId == null || openId.isEmpty()) {
+            throw new AuthenticationException(ERROR_OPENID_EMPTY);
+        }
+        return openId;
+    }
+
+    /**
+     * Find existing user or create new user
+     */
+    private String findOrCreateUser(String openId, String unionId, String mobileNumber) {
+        OffsetDateTime now = OffsetDateTime.now();
+
+        // 1. Try to find user by UnionID first
+        String username = findUserByUnionId(unionId, openId, now);
+
+        // 2. If not found, try to find by OpenID
+        if (username == null) {
+            username = findUserByOpenId(openId);
+        }
+
+        // 3. If still not found, create new user
+        if (username == null) {
+            username = createNewWeChatUser(unionId, openId, mobileNumber, now);
+        }
+
+        return username;
+    }
+
+    /**
+     * Find user by UnionID and handle OpenID conflicts
+     */
+    private String findUserByUnionId(String unionId, String openId, OffsetDateTime now) {
+        if (unionId == null || unionId.isEmpty()) {
+            return null;
+        }
+
+        Optional<String> usernameByUnionId = userIdentificationService.findUsernameByIdentifier(WECHAT_UNIONID_TYPE, unionId);
+        if (!usernameByUnionId.isPresent()) {
+            return null;
+        }
+
+        String username = usernameByUnionId.get();
+        logger.debug("Found user by UnionID={}, username={}", unionId, username);
+
+        // Handle OpenID conflicts
+        handleOpenIdConflicts(username, openId, unionId, now);
+
+        return username;
+    }
+
+    /**
+     * Handle OpenID conflicts for existing users
+     */
+    private void handleOpenIdConflicts(String username, String openId, String unionId, OffsetDateTime now) {
+        List<UserIdentificationDto> userIdentifications = userIdentificationService.getUserIdentifications(username);
+
+        List<String> conflictingOpenIds = new ArrayList<>();
+        boolean hasCurrentOpenId = false;
+
+        for (UserIdentificationDto identification : userIdentifications) {
+            if (WECHAT_OPENID_TYPE.equals(identification.getUserIdentificationTypeId())) {
+                if (openId.equals(identification.getIdentifier())) {
+                    hasCurrentOpenId = true;
+                } else {
+                    conflictingOpenIds.add(identification.getIdentifier());
+                }
+            }
+        }
+
+        if (!conflictingOpenIds.isEmpty()) {
+            logger.warn("OpenID conflict detected for user [{}]: current={}, existing={}, unionId={}",
+                    username, openId, String.join(", ", conflictingOpenIds), unionId);
+        }
+
+        // Add current OpenID if not already associated
+        if (!hasCurrentOpenId && conflictingOpenIds.isEmpty()) {
+            userIdentificationService.addUserIdentification(username, WECHAT_OPENID_TYPE, openId, true, now);
+            logger.debug("Added OpenID to existing user: username={}, OpenID={}", username, openId);
+        }
+    }
+
+    /**
+     * Find user by OpenID
+     */
+    private String findUserByOpenId(String openId) {
+        Optional<String> usernameByOpenId = userIdentificationService.findUsernameByIdentifier(WECHAT_OPENID_TYPE, openId);
+        if (usernameByOpenId.isPresent()) {
+            String username = usernameByOpenId.get();
+            logger.debug("Found user by OpenID={}, username={}", openId, username);
+            return username;
+        }
+        return null;
     }
 
     /**
@@ -142,11 +208,12 @@ public class WeChatService {
      * @param unionId      The union ID from WeChat
      * @param openId       The OpenID from WeChat
      * @param mobileNumber The mobile number from WeChat
-     * @return The authentication token
+     * @param now          Current timestamp
+     * @return The username
      */
     private String createNewWeChatUser(String unionId, String openId, String mobileNumber, OffsetDateTime now) {
         // Generate a random username and password
-        String username = "wx_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String username = USERNAME_PREFIX + UUID.randomUUID().toString().replace("-", "").substring(0, USERNAME_SUFFIX_LENGTH);
         String password = UUID.randomUUID().toString();
 
         logger.info("Creating new WeChat user: username={}, OpenID={}, UnionID={}", username, openId, unionId);
@@ -159,20 +226,23 @@ public class WeChatService {
 
         // Create the user in the database
         userService.createUser(userDto, password);
+
         // Link the WeChat OpenID to the user
-        userIdentificationService.addUserIdentification(username, "WECHAT_OPENID", openId, true, now);
+        userIdentificationService.addUserIdentification(username, WECHAT_OPENID_TYPE, openId, true, now);
+
         // Also store the UnionID if available
         if (unionId != null && !unionId.isEmpty()) {
-            userIdentificationService.addUserIdentification(username, "WECHAT_UNIONID", unionId, true, now);
+            userIdentificationService.addUserIdentification(username, WECHAT_UNIONID_TYPE, unionId, true, now);
         }
+
         // Store the mobile number if available
         if (mobileNumber != null && !mobileNumber.isEmpty()) {
-            Optional<String> usernameByMobileNumber = userIdentificationService.findUsernameByIdentifier("WECHAT_MOBILE_NUMBER", openId);
-            if (usernameByMobileNumber.isEmpty()) {
-                userIdentificationService.addUserIdentification(username, "WECHAT_MOBILE_NUMBER", mobileNumber, true, now);
+            Optional<String> existingUser = userIdentificationService.findUsernameByIdentifier(WECHAT_MOBILE_TYPE, mobileNumber);
+            if (existingUser.isEmpty()) {
+                userIdentificationService.addUserIdentification(username, WECHAT_MOBILE_TYPE, mobileNumber, true, now);
             }
         }
-        // Authenticate the user
+
         return username;
     }
 
