@@ -132,8 +132,8 @@ INSERT INTO oauth2_registered_client (
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":true,"settings.client.require-authorization-consent":false}',
     '{"@class":"java.util.Collections$UnmodifiableMap",
     "settings.token.reuse-refresh-tokens":true,
-    "settings.token.access-token-time-to-live":["java.time.Duration",3600.000000000],
-    "settings.token.refresh-token-time-to-live":["java.time.Duration",86400.000000000],
+    "settings.token.access-token-time-to-live":["java.time.Duration",7200.000000000],
+    "settings.token.refresh-token-time-to-live":["java.time.Duration",7776000.000000000],
     "settings.token.authorization-code-time-to-live":["java.time.Duration",600.000000000]}'
 ) ON CONFLICT (id) DO UPDATE SET
     client_secret = EXCLUDED.client_secret,
