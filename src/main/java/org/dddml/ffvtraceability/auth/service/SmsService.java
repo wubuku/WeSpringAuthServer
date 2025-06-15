@@ -26,5 +26,5 @@ public interface SmsService {
      * @param code The verification code
      * @return The authentication if successful, null otherwise
      */
-    org.springframework.security.core.Authentication verifyCodeAndLogin(String phoneNumber, String code);
+    //org.springframework.security.core.Authentication verifyCodeAndLogin(String phoneNumber, String code);
 } 

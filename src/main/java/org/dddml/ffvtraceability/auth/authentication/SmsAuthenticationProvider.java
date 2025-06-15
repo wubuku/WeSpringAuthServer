@@ -34,7 +34,7 @@ public class SmsAuthenticationProvider implements AuthenticationProvider {
         SmsAuthenticationToken token = (SmsAuthenticationToken) authentication;
         String phoneNumber = token.getPhoneNumber();
         String code = token.getCredentials().toString();
-        CustomUserDetails userDetails = smsVerificationService.getUserDetails(phoneNumber, code);
+        CustomUserDetails userDetails = smsVerificationService.processSmsLogin(phoneNumber, code);
         userDetails.setPhoneNumber(phoneNumber);
         return createAuthenticatedToken(userDetails, authentication, userDetails);
     }

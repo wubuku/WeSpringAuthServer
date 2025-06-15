@@ -43,15 +43,15 @@ public class WeChatService {
     /**
      * Process WeChat login
      *
-     * @param loginCde The authorization code from WeChat
+     * @param loginCode The authorization code from WeChat
      * @return The authenticated user
      */
     @Transactional
-    public CustomUserDetails processWeChatLogin(String loginCde, String mobileCode) {
+    public CustomUserDetails processWeChatLogin(String loginCode, String mobileCode) {
         WxMaJscode2SessionResult jscode2SessionResult = null;
         try {
             // Get access token, OpenID and UnionID (if available) from WeChat
-            jscode2SessionResult = wxMaService.jsCode2SessionInfo(loginCde);
+            jscode2SessionResult = wxMaService.jsCode2SessionInfo(loginCode);
         } catch (WxErrorException e) {
             throw new AuthenticationException("Failed to get WeChat session info:" + e.getMessage(), e);
         }
@@ -73,17 +73,12 @@ public class WeChatService {
             // 记录当前登录的 OpenID 和 UnionID 信息
             logger.info("Processing WeChat login: OpenID={}, UnionID={}", openId, unionId);
 
-            // 缓存查询结果，避免重复查询数据库
-            Optional<String> usernameByOpenId = Optional.empty();
-            Optional<String> usernameByUnionId = Optional.empty();
-            //Map<String, List<UserIdentificationDto>> userIdentificationsCache = new HashMap<>();
-
             // 确定用户账号的逻辑
             String username = null;
             OffsetDateTime now = OffsetDateTime.now();
             // 1. 优先使用 UnionID 查找用户
             if (unionId != null && !unionId.isEmpty()) {
-                usernameByUnionId = userIdentificationService.findUsernameByIdentifier("WECHAT_UNIONID", unionId);
+                Optional<String> usernameByUnionId = userIdentificationService.findUsernameByIdentifier("WECHAT_UNIONID", unionId);
                 if (usernameByUnionId.isPresent()) {
                     username = usernameByUnionId.get();
                     logger.info("Found user by UnionID={},username={}", unionId, username);
@@ -123,7 +118,7 @@ public class WeChatService {
             }
             // 2. 如果没有找到 UnionID 对应的用户，使用 OpenID 查找
             if (username == null) {
-                usernameByOpenId = userIdentificationService.findUsernameByIdentifier("WECHAT_OPENID", openId);
+                Optional<String> usernameByOpenId = userIdentificationService.findUsernameByIdentifier("WECHAT_OPENID", openId);
                 if (usernameByOpenId.isPresent()) { //如果使用 OpenId 找到了 username
                     username = usernameByOpenId.get();
                     logger.info("Found user by OpenID={},username={}", openId, username);

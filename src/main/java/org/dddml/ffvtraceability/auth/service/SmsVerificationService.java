@@ -24,7 +24,7 @@ public interface SmsVerificationService {
      */
     boolean verifyCode(String phoneNumber, String code);
 
-    CustomUserDetails getUserDetails(String phoneNumber, String code);
+    CustomUserDetails processSmsLogin(String phoneNumber, String code);
     /**
      * Check rate limits for sending SMS to a phone number
      * @param phoneNumber The phone number

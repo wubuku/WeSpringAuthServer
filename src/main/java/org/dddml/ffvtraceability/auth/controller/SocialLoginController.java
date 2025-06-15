@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.config.AuthServerProperties;
 import org.dddml.ffvtraceability.auth.exception.AuthenticationException;
 import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
+import org.dddml.ffvtraceability.auth.service.SmsService;
+import org.dddml.ffvtraceability.auth.service.SmsVerificationService;
 import org.dddml.ffvtraceability.auth.service.WeChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,10 +30,7 @@ import org.springframework.security.oauth2.server.authorization.token.DefaultOAu
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.util.Base64;
@@ -95,24 +94,22 @@ public class SocialLoginController {
 
     @Autowired
     private WeChatService weChatService;
-
     @Autowired
     private AuthServerProperties authServerProperties;
-
     @Autowired
     private OAuth2TokenGenerator<?> tokenGenerator;
-
     @Autowired
     private RegisteredClientRepository registeredClientRepository;
-
     @Autowired
     private OAuth2AuthorizationService authorizationService;
-
     @Autowired
     private PasswordEncoder passwordEncoder;
-
     @Autowired
     private AuthorizationServerSettings authorizationServerSettings;
+    @Autowired
+    private SmsVerificationService smsVerificationService;
+    @Autowired
+    private SmsService smsService;
 
     /**
      * WeChat登录端点
@@ -140,8 +137,57 @@ public class SocialLoginController {
             RegisteredClient registeredClient = getRegisteredClient(clientId);
 
             TokenPair tokenPair = generateTokenPair(registeredClient, authentication);
-            OAuth2Authorization authorization = createAndSaveAuthorization(registeredClient, userDetails, tokenPair,
-                    loginCode);
+            createAndSaveAuthorization(registeredClient, userDetails, tokenPair);
+
+            writeTokenResponse(response, tokenPair);
+
+        } catch (AuthenticationException e) {
+            handleAuthenticationError(response, e);
+        }
+    }
+    /**
+     * Send SMS verification code
+     */
+    @PostMapping("/sms/send-code")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> sendSmsCode(@RequestParam("mobileNumber") String mobileNumber) {
+        Map<String, Object> response = new HashMap<>();
+
+        if (mobileNumber == null || mobileNumber.isEmpty()) {
+            response.put("success", false);
+            response.put("message", "Mobile number is required");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        // Generate a verification code
+        String code = smsService.generateVerificationCode();
+
+        // Send the verification code
+        boolean sent = smsService.sendVerificationCode(mobileNumber, code);
+
+        if (sent) {
+            response.put("success", true);
+            response.put("message", "Verification code sent");
+            return ResponseEntity.ok(response);
+        } else {
+            response.put("success", false);
+            response.put("message", "Failed to send verification code");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    @GetMapping("/sms/login")
+    public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+                         @RequestParam("mobileNumber") String mobileNumber,
+                         @RequestParam("verificationCode") String verificationCode,
+                         HttpServletResponse response) throws IOException {
+        try {
+            CustomUserDetails userDetails = smsVerificationService.processSmsLogin(mobileNumber, verificationCode);
+            Authentication authentication = createAuthentication(userDetails);
+            RegisteredClient registeredClient = getRegisteredClient(clientId);
+
+            TokenPair tokenPair = generateTokenPair(registeredClient, authentication);
+            createAndSaveAuthorization(registeredClient, userDetails, tokenPair);
 
             writeTokenResponse(response, tokenPair);
 
@@ -158,7 +204,7 @@ public class SocialLoginController {
     public ResponseEntity<Map<String, Object>> refreshToken(
             @RequestParam(value = "grant_type", required = false) String grantType,
             @RequestParam(value = "refresh_token", required = false) String refreshTokenValue,
-            @RequestParam(value = "client_id", required = false) String clientId,
+            @RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
             @RequestParam(value = "client_secret", required = false) String clientSecret,
             HttpServletRequest request) {
 
@@ -310,14 +356,14 @@ public class SocialLoginController {
 
     private OAuth2Authorization createAndSaveAuthorization(RegisteredClient registeredClient,
                                                            CustomUserDetails userDetails,
-                                                           TokenPair tokenPair,
-                                                           String loginCode) {
+                                                           TokenPair tokenPair/*,
+                                                           String loginCode*/) {
         OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization
                 .withRegisteredClient(registeredClient)
                 .principalName(userDetails.getUsername())
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizedScopes(DEFAULT_SCOPES)
-                .attribute("code", loginCode)
+                //.attribute("code", loginCode)
                 .accessToken(tokenPair.getAccessToken())
                 .refreshToken(tokenPair.getRefreshToken());
 
@@ -368,7 +414,8 @@ public class SocialLoginController {
         response.getWriter().write(new ObjectMapper().writeValueAsString(errorResponse));
     }
 
-    private ClientCredentials extractClientCredentials(HttpServletRequest request, String clientId,
+    private ClientCredentials extractClientCredentials(HttpServletRequest request,
+                                                       String clientId,
                                                        String clientSecret) {
         String requestClientId = clientId;
         String requestClientSecret = clientSecret;
