@@ -167,9 +167,9 @@ public class WeChatService {
         }
         // Store the mobile number if available
         if (mobileNumber != null && !mobileNumber.isEmpty()) {
-            Optional<String> usernameByMobileNumber = userIdentificationService.findUsernameByIdentifier("MOBILE_NUMBER", openId);
+            Optional<String> usernameByMobileNumber = userIdentificationService.findUsernameByIdentifier("WECHAT_MOBILE_NUMBER", openId);
             if (usernameByMobileNumber.isEmpty()) {
-                userIdentificationService.addUserIdentification(username, "MOBILE_NUMBER", mobileNumber, true, now);
+                userIdentificationService.addUserIdentification(username, "WECHAT_MOBILE_NUMBER", mobileNumber, true, now);
             }
         }
         // Authenticate the user

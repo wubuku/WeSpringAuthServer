@@ -128,3 +128,4 @@ pids
 .env.test.local
 .env.production.local
 wechat_tokens.env
+sms_tokens.env

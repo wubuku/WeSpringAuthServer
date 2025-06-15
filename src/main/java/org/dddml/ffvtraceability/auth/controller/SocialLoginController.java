@@ -6,8 +6,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.config.AuthServerProperties;
 import org.dddml.ffvtraceability.auth.exception.AuthenticationException;
 import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
-import org.dddml.ffvtraceability.auth.service.SmsService;
-import org.dddml.ffvtraceability.auth.service.SmsVerificationService;
 import org.dddml.ffvtraceability.auth.service.WeChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +28,10 @@ import org.springframework.security.oauth2.server.authorization.token.DefaultOAu
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.io.IOException;
 import java.util.Base64;
@@ -106,10 +107,7 @@ public class SocialLoginController {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private AuthorizationServerSettings authorizationServerSettings;
-    @Autowired
-    private SmsVerificationService smsVerificationService;
-    @Autowired
-    private SmsService smsService;
+
 
     /**
      * WeChat登录端点
@@ -145,56 +143,7 @@ public class SocialLoginController {
             handleAuthenticationError(response, e);
         }
     }
-    /**
-     * Send SMS verification code
-     */
-    @PostMapping("/sms/send-code")
-    @ResponseBody
-    public ResponseEntity<Map<String, Object>> sendSmsCode(@RequestParam("mobileNumber") String mobileNumber) {
-        Map<String, Object> response = new HashMap<>();
 
-        if (mobileNumber == null || mobileNumber.isEmpty()) {
-            response.put("success", false);
-            response.put("message", "Mobile number is required");
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        // Generate a verification code
-        String code = smsService.generateVerificationCode();
-
-        // Send the verification code
-        boolean sent = smsService.sendVerificationCode(mobileNumber, code);
-
-        if (sent) {
-            response.put("success", true);
-            response.put("message", "Verification code sent");
-            return ResponseEntity.ok(response);
-        } else {
-            response.put("success", false);
-            response.put("message", "Failed to send verification code");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-    }
-
-    @GetMapping("/sms/login")
-    public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
-                         @RequestParam("mobileNumber") String mobileNumber,
-                         @RequestParam("verificationCode") String verificationCode,
-                         HttpServletResponse response) throws IOException {
-        try {
-            CustomUserDetails userDetails = smsVerificationService.processSmsLogin(mobileNumber, verificationCode);
-            Authentication authentication = createAuthentication(userDetails);
-            RegisteredClient registeredClient = getRegisteredClient(clientId);
-
-            TokenPair tokenPair = generateTokenPair(registeredClient, authentication);
-            createAndSaveAuthorization(registeredClient, userDetails, tokenPair);
-
-            writeTokenResponse(response, tokenPair);
-
-        } catch (AuthenticationException e) {
-            handleAuthenticationError(response, e);
-        }
-    }
 
     /**
      * WeChat刷新令牌端点

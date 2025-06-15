@@ -15,7 +15,8 @@ spring:
 
   sql:
     init:
-      mode: never #always
+      #mode: always
+      mode: never
       continue-on-error: true
       schema-locations:
         - classpath:schema.sql

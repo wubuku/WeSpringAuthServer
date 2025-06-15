@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 import java.util.Random;
@@ -43,9 +42,9 @@ public class SmsServiceImpl implements SmsService {
         // Send the SMS using the configured provider
         logger.info("Sending SMS verification code to mobile number: {}", mobileNumber);
         try {
-            smsProvider.sendVerificationCode(mobileNumber, code);
-            // Save the code to the database
+            // Save the code to the database first
             smsVerificationService.saveVerificationCode(mobileNumber, code, expirationMinutes);
+            smsProvider.sendVerificationCode(mobileNumber, code);
             smsVerificationService.recordSendAttempt(mobileNumber, smsProvider.getProviderName(), true, "SMS sent successfully");
             return true;
         } catch (Exception e) {
@@ -53,6 +52,7 @@ public class SmsServiceImpl implements SmsService {
             try {
                 smsVerificationService.recordSendAttempt(mobileNumber, smsProvider.getProviderName(), false, "Failed to send SMS" + e.getMessage());
             } catch (Exception ignored) {
+                // Ignore
             }
             return false;
         }
