@@ -43,15 +43,15 @@ public class WeChatService {
     /**
      * Process WeChat login
      *
-     * @param loginCde The authorization code from WeChat
+     * @param loginCode The authorization code from WeChat
      * @return The authenticated user
      */
     @Transactional
-    public CustomUserDetails processWeChatLogin(String loginCde, String mobileCode) {
+    public CustomUserDetails processWeChatLogin(String loginCode, String mobileCode) {
         WxMaJscode2SessionResult jscode2SessionResult = null;
         try {
             // Get access token, OpenID and UnionID (if available) from WeChat
-            jscode2SessionResult = wxMaService.jsCode2SessionInfo(loginCde);
+            jscode2SessionResult = wxMaService.jsCode2SessionInfo(loginCode);
         } catch (WxErrorException e) {
             throw new AuthenticationException("Failed to get WeChat session info:" + e.getMessage(), e);
         }

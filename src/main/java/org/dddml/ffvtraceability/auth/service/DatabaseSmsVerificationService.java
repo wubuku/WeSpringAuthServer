@@ -1,5 +1,6 @@
 package org.dddml.ffvtraceability.auth.service;
 
+import org.dddml.ffvtraceability.auth.dto.UserDto;
 import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +16,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Database implementation of SMS verification service
@@ -50,18 +53,42 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
     }
 
     @Transactional
-    public CustomUserDetails getUserDetails(String phoneNumber, String code) {
+    public CustomUserDetails processSmsLogin(String phoneNumber, String code) {
         boolean verified = verifyCode(phoneNumber, code);
         if (!verified) {
             //logger.warn("Failed to verify SMS code for phone number: {}", phoneNumber);
             throw new BadCredentialsException("Invalid verification code");
         }
-        Optional<String> username = userIdentificationService.findUsernameByIdentifier("PHONE", phoneNumber);
-        if (username.isEmpty()) {
-            logger.warn("Failed to find username for phone number: {}", phoneNumber);
-            throw new BadCredentialsException("Invalid phone number");
+        String username = null;
+        Optional<String> optionalUsername = userIdentificationService.findUsernameByIdentifier("MOBILE_NUMBER", phoneNumber);
+        //            logger.warn("Failed to find username for mobile number: {}", phoneNumber);
+        //            throw new BadCredentialsException("Invalid mobile number");
+        username = optionalUsername.orElseGet(() -> createUserByMobileNumber(phoneNumber, null));
+        return userService.getUserDetails(username);
+    }
+
+    private String createUserByMobileNumber(String mobileNumber, OffsetDateTime now) {
+        // Generate a random username and password
+        String username = "mp_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String password = UUID.randomUUID().toString();
+
+        logger.info("Creating new mobile user: username={}, mobile number={}", username, mobileNumber);
+
+        // Create the user
+        UserDto userDto = new UserDto();
+        userDto.setUsername(username);
+        userDto.setMobileNumber(mobileNumber);
+        userDto.setEnabled(true);
+        if (now == null) {
+            now = OffsetDateTime.now();
         }
-        return userService.getUserDetails(username.get());
+        // Create the user in the database
+        userService.createUser(userDto, password);
+        //Optional<String> usernameByMobileNumber = userIdentificationService.findUsernameByIdentifier("MOBILE_NUMBER", mobileNumber);
+        //if (usernameByMobileNumber.isEmpty()) {
+        userIdentificationService.addUserIdentification(username, "MOBILE_NUMBER", mobileNumber, true, now);
+        //}
+        return username;
     }
 
     @Override

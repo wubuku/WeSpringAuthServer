@@ -34,24 +34,24 @@ public class SmsServiceImpl implements SmsService {
     }
 
     @Override
-    public boolean sendVerificationCode(String phoneNumber, String code) {
+    public boolean sendVerificationCode(String mobileNumber, String code) {
         // Check rate limiting
-        if (!smsVerificationService.checkRateLimit(phoneNumber)) {
-            logger.warn("Rate limit exceeded for phone number: {}", phoneNumber);
+        if (!smsVerificationService.checkRateLimit(mobileNumber)) {
+            logger.warn("Rate limit exceeded for mobile number: {}", mobileNumber);
             return false;
         }
         // Send the SMS using the configured provider
-        logger.info("Sending SMS verification code to phone number: {}", phoneNumber);
+        logger.info("Sending SMS verification code to mobile number: {}", mobileNumber);
         try {
-            smsProvider.sendVerificationCode(phoneNumber, code);
+            smsProvider.sendVerificationCode(mobileNumber, code);
             // Save the code to the database
-            smsVerificationService.saveVerificationCode(phoneNumber, code, expirationMinutes);
-            smsVerificationService.recordSendAttempt(phoneNumber, smsProvider.getProviderName(), true, "SMS sent successfully");
+            smsVerificationService.saveVerificationCode(mobileNumber, code, expirationMinutes);
+            smsVerificationService.recordSendAttempt(mobileNumber, smsProvider.getProviderName(), true, "SMS sent successfully");
             return true;
         } catch (Exception e) {
             logger.error("Error sending SMS verification code :{}", e.getMessage());
             try {
-                smsVerificationService.recordSendAttempt(phoneNumber, smsProvider.getProviderName(), false, "Failed to send SMS" + e.getMessage());
+                smsVerificationService.recordSendAttempt(mobileNumber, smsProvider.getProviderName(), false, "Failed to send SMS" + e.getMessage());
             } catch (Exception ignored) {
             }
             return false;
@@ -67,18 +67,4 @@ public class SmsServiceImpl implements SmsService {
         }
         return sb.toString();
     }
-
-    @Override
-    public Authentication verifyCodeAndLogin(String phoneNumber, String code) {
-//        boolean verified = smsVerificationService.verifyCode(phoneNumber, code);
-//
-//        if (!verified) {
-//            logger.warn("Failed to verify SMS code for phone number: {}", phoneNumber);
-//            return null;
-//        }
-//
-//        // Use the authentication provider to create an authenticated token
-//        return smsAuthenticationProvider.createAuthenticatedToken(phoneNumber);
-        return null;
-    }
-} 
+}
