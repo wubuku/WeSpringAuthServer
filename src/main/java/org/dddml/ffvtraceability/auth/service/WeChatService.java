@@ -73,17 +73,12 @@ public class WeChatService {
             // 记录当前登录的 OpenID 和 UnionID 信息
             logger.info("Processing WeChat login: OpenID={}, UnionID={}", openId, unionId);
 
-            // 缓存查询结果，避免重复查询数据库
-            Optional<String> usernameByOpenId = Optional.empty();
-            Optional<String> usernameByUnionId = Optional.empty();
-            //Map<String, List<UserIdentificationDto>> userIdentificationsCache = new HashMap<>();
-
             // 确定用户账号的逻辑
             String username = null;
             OffsetDateTime now = OffsetDateTime.now();
             // 1. 优先使用 UnionID 查找用户
             if (unionId != null && !unionId.isEmpty()) {
-                usernameByUnionId = userIdentificationService.findUsernameByIdentifier("WECHAT_UNIONID", unionId);
+                Optional<String> usernameByUnionId = userIdentificationService.findUsernameByIdentifier("WECHAT_UNIONID", unionId);
                 if (usernameByUnionId.isPresent()) {
                     username = usernameByUnionId.get();
                     logger.info("Found user by UnionID={},username={}", unionId, username);
@@ -123,7 +118,7 @@ public class WeChatService {
             }
             // 2. 如果没有找到 UnionID 对应的用户，使用 OpenID 查找
             if (username == null) {
-                usernameByOpenId = userIdentificationService.findUsernameByIdentifier("WECHAT_OPENID", openId);
+                Optional<String> usernameByOpenId = userIdentificationService.findUsernameByIdentifier("WECHAT_OPENID", openId);
                 if (usernameByOpenId.isPresent()) { //如果使用 OpenId 找到了 username
                     username = usernameByOpenId.get();
                     logger.info("Found user by OpenID={},username={}", openId, username);
