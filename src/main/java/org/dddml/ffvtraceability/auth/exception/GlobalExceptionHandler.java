@@ -18,26 +18,27 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @ExceptionHandler(Exception.class)
-    public Object handleGeneralException(Exception ex, WebRequest request) {
+    public ResponseEntity<Object> handleGeneralException(Exception ex, HttpServletRequest request) {
         logger.info("Handling exception: {}", ex.getMessage(), ex);
         
-        // 检查请求是否接受JSON响应
+        // 检查请求是否为API请求
+        String requestUri = request.getRequestURI();
         String acceptHeader = request.getHeader("Accept");
-        boolean isApiRequest = request.getDescription(false).contains("/api/") ||
+        boolean isApiRequest = requestUri.startsWith("/api/") ||
                              (acceptHeader != null && acceptHeader.contains(MediaType.APPLICATION_JSON_VALUE));
         
         if (isApiRequest) {
-            // API请求返回JSON格式的错误
-            return ProblemDetail.forStatusAndDetail(
-                    HttpStatus.BAD_REQUEST,
+            // API请求返回JSON格式的错误响应
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
                     ex.getMessage()
             );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problemDetail);
         } else {
-            // Web页面请求返回错误页面
-            ModelAndView modelAndView = new ModelAndView("error");
-            modelAndView.addObject("error", ex.getMessage());
-            modelAndView.addObject("status", HttpStatus.BAD_REQUEST.value());
-            return modelAndView;
+            // Web页面请求重定向到错误页面
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header("Location", "/error?message=" + ex.getMessage())
+                    .build();
         }
     }
 }

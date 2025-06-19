@@ -45,6 +45,7 @@ public class SecurityConfig {
             .csrf(c -> c.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers("/api/sms/**", "/api/wechat/**").permitAll()  // SMS和微信相关API无需认证
                 .anyRequest().authenticated()
             );
         return http.build();
@@ -72,7 +73,9 @@ public class SecurityConfig {
                                     "/static/**",
                                     "/images/**",
                                     "/css/**",
-                                    "/js/**"
+                                    "/js/**",
+                                    "/sms/**",        // SMS登录相关端点
+                                    "/wechat/**"      // 微信登录相关端点
                                 ).permitAll()
                                 .requestMatchers("/user-management")
                                     .hasAuthority("Users_Read")
