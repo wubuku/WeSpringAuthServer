@@ -55,15 +55,32 @@ public class SmsLoginController {
     private RegisteredClientRepository registeredClientRepository;
 
     /**
-     * 发送SMS验证码 - 微信小程序使用
-     * 无状态API，支持JSON格式请求
+     * 发送SMS验证码 - JSON格式 (新的微信小程序使用)
+     * JSON格式: {"phoneNumber": "13800138000"}
      */
-    @PostMapping("/send-code")
+    @PostMapping(value = "/send-code", consumes = "application/json")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> sendSmsCode(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> sendSmsCodeJson(@RequestBody Map<String, String> request) {
         String mobileNumber = request.get("phoneNumber");
+        return processSmsCodeRequest(mobileNumber);
+    }
+    
+    /**
+     * 发送SMS验证码 - Form格式 (原有测试脚本使用)
+     * Form格式: mobileNumber=13800138000
+     */
+    @PostMapping(value = "/send-code", consumes = "application/x-www-form-urlencoded")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> sendSmsCodeForm(@RequestParam("mobileNumber") String mobileNumber) {
+        return processSmsCodeRequest(mobileNumber);
+    }
+    
+    /**
+     * 处理SMS验证码发送的通用逻辑
+     */
+    private ResponseEntity<Map<String, Object>> processSmsCodeRequest(String mobileNumber) {
         Map<String, Object> response = new HashMap<>();
-
+        
         if (mobileNumber == null || mobileNumber.isEmpty()) {
             response.put("success", false);
             response.put("message", "Mobile number is required");
