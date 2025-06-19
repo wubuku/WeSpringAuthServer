@@ -16,12 +16,11 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.jackson2.SecurityJackson2Modules;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
@@ -29,10 +28,12 @@ import org.springframework.security.oauth2.server.authorization.client.JdbcRegis
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2AuthorizationServerJackson2Module;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.token.*;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -41,10 +42,7 @@ import java.security.*;
 import java.security.cert.Certificate;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Configuration
@@ -217,23 +215,32 @@ public class AuthorizationServerConfig {
         logger.info("Creating OAuth2AuthorizationService with ObjectMapper: {}", oauth2ObjectMapper.getClass().getName());
         logger.info("ObjectMapper registered modules: {}", oauth2ObjectMapper.getRegisteredModuleIds());
 
+        // 创建标准的ObjectMapper，避免activateDefaultTyping的兼容性问题
+        ObjectMapper authServiceMapper = new ObjectMapper();
+        authServiceMapper.registerModules(SecurityJackson2Modules.getModules(getClass().getClassLoader()));
+        authServiceMapper.registerModule(new OAuth2AuthorizationServerJackson2Module());
+        
+        // 移除activateDefaultTyping - 这是造成序列化问题的根源
+        // 使用Spring Security推荐的标准配置
+        logger.info("AuthorizationService ObjectMapper configured with standard Spring Security modules");
+
         JdbcOAuth2AuthorizationService service = new JdbcOAuth2AuthorizationService(
                 jdbcTemplate,
                 registeredClientRepository);
 
-        // 使用正确配置的ObjectMapper - 关键修复：确保OAuth2数据正确序列化
+        // 使用标准配置的ObjectMapper
         JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper rowMapper =
                 new JdbcOAuth2AuthorizationService.OAuth2AuthorizationRowMapper(registeredClientRepository);
-        rowMapper.setObjectMapper(oauth2ObjectMapper);
+        rowMapper.setObjectMapper(authServiceMapper);
         service.setAuthorizationRowMapper(rowMapper);
 
         // 重要：也要设置参数映射器的ObjectMapper，确保完整的序列化支持
         JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper parametersMapper =
                 new JdbcOAuth2AuthorizationService.OAuth2AuthorizationParametersMapper();
-        parametersMapper.setObjectMapper(oauth2ObjectMapper);
+        parametersMapper.setObjectMapper(authServiceMapper);
         service.setAuthorizationParametersMapper(parametersMapper);
 
-        logger.info("OAuth2AuthorizationService configured with custom ObjectMapper");
+        logger.info("OAuth2AuthorizationService configured with standard Spring Security ObjectMapper");
         return service;
     }
 

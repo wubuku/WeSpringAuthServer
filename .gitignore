@@ -133,3 +133,4 @@ auth.env
 cookies.txt
 cookies*.txt
 session.env
+tokens.env

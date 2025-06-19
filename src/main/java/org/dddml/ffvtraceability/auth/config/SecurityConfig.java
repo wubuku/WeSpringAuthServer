@@ -56,9 +56,12 @@ public class SecurityConfig {
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(s -> s
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 )
-                .csrf(c -> c.disable())
+                // CSRF保护启用，对API端点、OAuth2端点、SMS和微信端点禁用
+                .csrf(csrf -> csrf
+                        .ignoringRequestMatchers("/api/**", "/oauth2/**", "/sms/**", "/wechat/**")
+                )
                 .authorizeHttpRequests(authorize -> authorize
                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                                 .requestMatchers(

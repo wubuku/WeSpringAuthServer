@@ -89,10 +89,10 @@ public class SmsController {
      * SMS登录端点 - 从SocialLoginController移动过来
      */
     @GetMapping("/auth")
-    public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
-                         @RequestParam("mobileNumber") String mobileNumber,
-                         @RequestParam("verificationCode") String verificationCode,
-                         HttpServletResponse response) throws IOException {
+    public void smsAuth(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+                        @RequestParam("mobileNumber") String mobileNumber,
+                        @RequestParam("verificationCode") String verificationCode,
+                        HttpServletResponse response) throws IOException {
         try {
             CustomUserDetails userDetails = smsVerificationService.processSmsLogin(mobileNumber, verificationCode);
             Authentication authentication = oAuth2TokenService.createAuthentication(userDetails);
@@ -106,6 +106,18 @@ public class SmsController {
         } catch (AuthenticationException e) {
             handleAuthenticationError(response, e);
         }
+    }
+
+    /**
+     * SMS登录端点 - 为其他合作方保留的兼容性端点
+     */
+    @GetMapping("/login")
+    public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+                         @RequestParam("mobileNumber") String mobileNumber,
+                         @RequestParam("verificationCode") String verificationCode,
+                         HttpServletResponse response) throws IOException {
+        // 直接调用 smsAuth 方法，保持完全相同的逻辑
+        smsAuth(clientId, mobileNumber, verificationCode, response);
     }
 
     // Private helper methods

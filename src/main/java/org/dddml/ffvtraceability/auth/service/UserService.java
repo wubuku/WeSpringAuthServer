@@ -275,7 +275,7 @@ public class UserService {
         }
 
         Set<GrantedAuthority> grantedAuthorities = new HashSet<>();
-        Set<String> groups = new HashSet<>(groupNames);
+        List<String> groups = new ArrayList<>(groupNames);
         for (String authority : authorities) {
             grantedAuthorities.add(new SimpleGrantedAuthority(authority));
         }
