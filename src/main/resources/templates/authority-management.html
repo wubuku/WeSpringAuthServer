@@ -385,7 +385,7 @@
             showLoading();
             try {
                 console.log('Fetching users list...');
-                const response = await fetch('/api/authoritys/users', {
+                                 const response = await fetch('/api/authorities/users', {
                     headers: {
                         [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
                     }
@@ -402,23 +402,23 @@
             }
         }
 
-        // Load base authoritys
+        // Load base authorities
         async function loadBaseAuthoritys() {
             showLoading();
             try {
-                console.log('Loading base authoritys...');
-                const response = await fetch('/api/authoritys/base', {
+                console.log('Loading base authorities...');
+                                 const response = await fetch('/api/authorities/base', {
                     headers: {
                         [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
                     }
                 });
-                const authoritys = await response.json();
-                console.log('Received base authoritys:', authoritys);
-                baseAuthoritys = authoritys.filter(p => p.enabled !== false);
-                console.log('Filtered active authoritys:', baseAuthoritys);
+                const authorities = await response.json();
+                console.log('Received base authorities:', authorities);
+                baseAuthoritys = authorities.filter(p => p.enabled !== false);
+                console.log('Filtered active authorities:', baseAuthoritys);
             } catch (error) {
-                console.error('Error loading base authoritys:', error);
-                showError('Failed to load authoritys: ' + error.message);
+                console.error('Error loading base authorities:', error);
+                showError('Failed to load authorities: ' + error.message);
             } finally {
                 hideLoading();
             }
@@ -427,7 +427,7 @@
         // Load users from backend
         async function loadGroups() {
             try {
-                const response = await fetch('/api/authoritys/groups', {
+                                 const response = await fetch('/api/authorities/groups', {
                     headers: {
                         [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
                     }
@@ -475,15 +475,15 @@
             try {
                 let response;
                 if (currentTargetType === 'user') {
-                    response = await fetch(`/api/authoritys/user/${currentTarget}`);
+                    response = await fetch(`/api/authorities/user/${currentTarget}`);
                 } else {
-                    response = await fetch(`/api/authoritys/group/${currentTarget}`);
+                    response = await fetch(`/api/authorities/group/${currentTarget}`);
                 }
-                const authoritys = await response.json();
-                currentAuthoritys = new Set(authoritys);
+                const authorities = await response.json();
+                currentAuthoritys = new Set(authorities);
             } catch (error) {
-                console.error('Error loading authoritys:', error);
-                showError('Failed to load authoritys: ' + error.message);
+                console.error('Error loading authorities:', error);
+                showError('Failed to load authorities: ' + error.message);
             } finally {
                 hideLoading();
             }
@@ -497,7 +497,7 @@
                 // 当没有选择目标时显示提示信息
                 treeContainer.innerHTML = `
                     <div class="authority-tree-placeholder">
-                        <i>ℹ️</i> Please select a ${currentTargetType} to manage authoritys
+                        <i>ℹ️</i> Please select a ${currentTargetType} to manage authorities
                     </div>
                 `;
                 return;
@@ -516,10 +516,10 @@
             updateParentNodeStates();
         }
 
-        // Build tree structure from flat authoritys
-        function buildAuthorityTree(authoritys) {
+        // Build tree structure from flat authorities
+        function buildAuthorityTree(authorities) {
             const tree = {};
-            authoritys.forEach(authority => {
+            authorities.forEach(authority => {
                 // 如果权限被明确禁用（enabled = false），则跳过
                 if (authority.enabled === false) {
                     return;
@@ -587,8 +587,8 @@
                 showLoading();
                 try {
                     const endpoint = currentTargetType === 'user' ? 
-                        '/api/authoritys/batch-update' : 
-                        '/api/authoritys/group/batch-update';
+                        '/api/authorities/batch-update' : 
+                        '/api/authorities/group/batch-update';
                     
                     const response = await fetch(endpoint, {
                         method: 'POST',
@@ -598,17 +598,17 @@
                         },
                         body: JSON.stringify(currentTargetType === 'user' ? {
                             username: currentTarget,
-                            authoritys: childAuthoritys,
+                            authorities: childAuthoritys,
                             granted: isChecked
                         } : {
                             groupId: currentTarget,
-                            authoritys: childAuthoritys,
+                            authorities: childAuthoritys,
                             granted: isChecked
                         })
                     });
 
                     if (!response.ok) {
-                        throw new Error('Failed to update authoritys');
+                        throw new Error('Failed to update authorities');
                     }
 
                     // 更新复选框状态
@@ -626,7 +626,7 @@
 
                     showSuccess(`Authoritys ${isChecked ? 'granted' : 'revoked'} successfully`);
                 } catch (error) {
-                    showError('Failed to update authoritys: ' + error.message);
+                    showError('Failed to update authorities: ' + error.message);
                     checkbox.checked = !isChecked;
                 } finally {
                     hideLoading();
@@ -637,8 +637,8 @@
                 showLoading();
                 try {
                     const endpoint = currentTargetType === 'user' ? 
-                        '/api/authoritys/update' : 
-                        '/api/authoritys/group/update';
+                        '/api/authorities/update' : 
+                        '/api/authorities/group/update';
                     
                     const response = await fetch(endpoint, {
                         method: 'POST',
@@ -680,7 +680,7 @@
 
         // 添加获取子节点权限的辅助函数
         function getChildAuthoritys(parentAuthority) {
-            const authoritys = [];
+            const authorities = [];
             const parentParts = parentAuthority.split('_');
             
             // 递归查找所有叶子节点权限
@@ -688,7 +688,7 @@
                 for (const [key, value] of Object.entries(node)) {
                     const newPath = [...currentPath, key];
                     if (Object.keys(value).length === 0) {
-                        authoritys.push(newPath.join('_'));
+                        authorities.push(newPath.join('_'));
                     } else {
                         findLeafAuthoritys(value, newPath);
                     }
@@ -704,7 +704,7 @@
             }
             
             findLeafAuthoritys(currentNode, path);
-            return authoritys;
+            return authorities;
         }
 
         // 添加查找节点的辅助函数
