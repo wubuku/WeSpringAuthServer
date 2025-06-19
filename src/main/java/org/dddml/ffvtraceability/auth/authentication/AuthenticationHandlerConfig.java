@@ -31,14 +31,8 @@ public class AuthenticationHandlerConfig {
                 String targetUrl = savedRequest.getRedirectUrl();
                 response.sendRedirect(targetUrl);
             } else {
-                // 重定向到 "/"
-                // response.sendRedirect("/");
-                CsrfToken token = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
-                response.setHeader(token.getHeaderName(), token.getToken());
-                // response.setContentType("text/plain;charset=UTF-8");
-                // response.addCookie(new Cookie("XSRF-TOKEN", token.getToken()));
-                response.setStatus(HttpServletResponse.SC_OK);
-                // response.getWriter().flush();
+                // 重定向到主页
+                response.sendRedirect("/");
             }
         }
     }
