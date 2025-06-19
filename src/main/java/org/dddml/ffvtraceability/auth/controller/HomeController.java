@@ -15,6 +15,13 @@ public class HomeController {
     @GetMapping("/")
     public String home(Model model) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        
+        // 检查用户是否已认证
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
+            logger.info("User not authenticated, redirecting to login page");
+            return "redirect:/login";
+        }
+        
         String username = auth.getName();
         boolean isAdmin = auth.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
