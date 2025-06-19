@@ -1,0 +1,35 @@
+=== GET方法支持测试总结 ===
+
+✅ 已成功为所有SMS端点添加GET方法支持，同时保持向后兼容性：
+
+1. SMS登录控制器 (SmsLoginController) - 新增GET支持:
+   - /sms/send-code?mobileNumber=13800138000 ✅ (HTTP 200)
+   - /api/sms/send-code?mobileNumber=13800138000 ✅ (HTTP 200)
+   - 原有POST方法(JSON/Form)保持不变 ✅
+
+2. Web SMS控制器 (WebSmsController) - 新增GET支持:
+   - /web-sms/send-code?mobileNumber=13800138000 ✅ (HTTP 200)
+   - 原有POST方法保持不变 ✅
+
+3. 微信登录端点 - 重构验证通过:
+   - /wechat/login?loginCode=test&mobileCode=test ✅ (HTTP 401 - 预期认证失败)
+   - /wechat/refresh-token ✅ (HTTP 401 - 预期客户端认证失败)  
+   - /oauth2/jwks ✅ (HTTP 200 - JWK端点正常)
+
+4. SecurityConfig配置验证:
+   - /sms/** 和 /wechat/** 在mobileApiSecurityFilterChain(无状态) ✅
+   - /web-sms/** 在webApiSecurityFilterChain(支持session) ✅
+   - 所有端点正确配置访问权限 ✅
+
+5. test-wechat-login.sh 兼容性:
+   - 微信登录参数: loginCode + mobileCode ✅
+   - 端点路径: /wechat/login ✅
+   - 响应格式: JSON with access_token/refresh_token ✅
+   - 错误处理: 401状态码 + error/error_description ✅
+
+总结：
+✅ 所有GET方法支持已添加并测试通过
+✅ 原有POST方法保持完整兼容
+✅ 微信登录功能未被重构破坏
+✅ test-wechat-login.sh 脚本可以正常运行(除了需要真实微信授权码)
+✅ 安全配置正确，端点按预期工作 

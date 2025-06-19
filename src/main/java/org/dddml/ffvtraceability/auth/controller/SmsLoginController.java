@@ -76,6 +76,17 @@ public class SmsLoginController {
     }
     
     /**
+     * 发送SMS验证码 - GET方法 (为了兼容性支持)
+     * 虽然不是典型的REST实践，但为了兼容某些客户端需求
+     * GET格式: /send-code?mobileNumber=13800138000
+     */
+    @GetMapping("/send-code")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> sendSmsCodeGet(@RequestParam("mobileNumber") String mobileNumber) {
+        return processSmsCodeRequest(mobileNumber);
+    }
+    
+    /**
      * 处理SMS验证码发送的通用逻辑
      */
     private ResponseEntity<Map<String, Object>> processSmsCodeRequest(String mobileNumber) {

@@ -39,13 +39,31 @@ public class WebSmsController {
     private SmsVerificationService smsVerificationService;
 
     /**
-     * 发送SMS验证码 - Web页面使用
+     * 发送SMS验证码 - Web页面使用 (POST方法)
      * 基于session的API
      */
     @PostMapping("/send-code")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> sendSmsCode(@RequestBody Map<String, String> request) {
         String mobileNumber = request.get("phoneNumber");
+        return processSmsCodeRequest(mobileNumber);
+    }
+    
+    /**
+     * 发送SMS验证码 - Web页面使用 (GET方法)
+     * 为了兼容性支持GET方法
+     * GET格式: /send-code?mobileNumber=13800138000
+     */
+    @GetMapping("/send-code")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> sendSmsCodeGet(@RequestParam("mobileNumber") String mobileNumber) {
+        return processSmsCodeRequest(mobileNumber);
+    }
+    
+    /**
+     * 处理SMS验证码发送的通用逻辑
+     */
+    private ResponseEntity<Map<String, Object>> processSmsCodeRequest(String mobileNumber) {
         Map<String, Object> response = new HashMap<>();
 
         if (mobileNumber == null || mobileNumber.isEmpty()) {
