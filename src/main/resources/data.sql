@@ -24,9 +24,9 @@ ON CONFLICT (group_name) DO NOTHING;
 --     ('*', '{bcrypt}$2a$10$eKBDBSf4DBNzRwbF7fx5IetdKKjqzkYoST0F7Dkro84eRiDTBJYky', true, false, false, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
 
 -- 创建测试用户 (使用ON CONFLICT避免重复插入)
-INSERT INTO users (username, password, enabled, password_change_required, first_login, password_last_changed,temp_password_last_generated) VALUES
-    ('admin', '{bcrypt}$2a$10$eKBDBSf4DBNzRwbF7fx5IetdKKjqzkYoST0F7Dkro84eRiDTBJYky', true, false, false, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),  -- password=admin
-    ('user', '{bcrypt}$2a$10$eKBDBSf4DBNzRwbF7fx5IetdKKjqzkYoST0F7Dkro84eRiDTBJYky', true, true, true, null,CURRENT_TIMESTAMP)   -- password=admin
+INSERT INTO users (username, password, enabled, password_change_required, first_login, password_last_changed) VALUES
+    ('admin', '{bcrypt}$2a$10$eKBDBSf4DBNzRwbF7fx5IetdKKjqzkYoST0F7Dkro84eRiDTBJYky', true, false, false, CURRENT_TIMESTAMP),  -- password=admin
+    ('user', '{bcrypt}$2a$10$eKBDBSf4DBNzRwbF7fx5IetdKKjqzkYoST0F7Dkro84eRiDTBJYky', true, true, true, null)   -- password=admin
 ON CONFLICT (username) DO NOTHING;
 
 -- 给 admin 用户添加 ROLE_ADMIN 权限（auth server 使用这个权限对特权操作进行保护）
