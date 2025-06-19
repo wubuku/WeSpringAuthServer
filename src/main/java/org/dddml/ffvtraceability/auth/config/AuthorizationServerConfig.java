@@ -16,11 +16,13 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.jackson2.SecurityJackson2Modules;
-import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
@@ -33,7 +35,6 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import org.springframework.security.oauth2.server.authorization.token.*;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
-import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -42,7 +43,9 @@ import java.security.*;
 import java.security.cert.Certificate;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Configuration
@@ -219,7 +222,7 @@ public class AuthorizationServerConfig {
         ObjectMapper authServiceMapper = new ObjectMapper();
         authServiceMapper.registerModules(SecurityJackson2Modules.getModules(getClass().getClassLoader()));
         authServiceMapper.registerModule(new OAuth2AuthorizationServerJackson2Module());
-        
+
         // 移除activateDefaultTyping - 这是造成序列化问题的根源
         // 使用Spring Security推荐的标准配置
         logger.info("AuthorizationService ObjectMapper configured with standard Spring Security modules");
@@ -253,12 +256,12 @@ public class AuthorizationServerConfig {
 
         // 2. 构建 RSAKey（包含公钥和私钥）
         // 获取配置的密钥ID，如果没有配置则使用默认值
-        String keyId = jwtKeyProperties.getKeyAlias() != null 
-            ? jwtKeyProperties.getKeyAlias() + "-jwk" 
-            : "ffv-jwt-key-2025";
-        
+        String keyId = jwtKeyProperties.getKeyAlias() != null
+                ? jwtKeyProperties.getKeyAlias() + "-jwk"
+                : "ffv-jwt-key-2025";
+
         logger.info("JWT密钥ID设置为: {}", keyId);
-        
+
         RSAKey rsaKey = new RSAKey.Builder(publicKey)
                 .privateKey(privateKey)  // 私钥仅用于签名，不对外暴露
                 .keyID(keyId)  // 使用稳定的密钥ID，基于配置生成

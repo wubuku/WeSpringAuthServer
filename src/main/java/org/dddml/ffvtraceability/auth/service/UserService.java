@@ -101,7 +101,7 @@ public class UserService {
         if (user != null) {
             sql = "select * from groups where id in (select group_id from group_members gm where gm.username=?)";
             user.setGroups(jdbcTemplate.query(sql, new GroupDtoMapper(), username));
-            
+
             // 获取用户关联的所有组的权限集合
             String sqlAuthorities = """
                         SELECT DISTINCT ad.authority_id

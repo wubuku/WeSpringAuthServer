@@ -55,7 +55,7 @@ public class SmsServiceImpl implements SmsService {
             }
             return false;
         }
-        
+
         // Now send the SMS - if this fails, the verification code is still valid in DB
         try {
             logger.info("Attempting to send SMS via provider: {}", smsProvider.getProviderName());

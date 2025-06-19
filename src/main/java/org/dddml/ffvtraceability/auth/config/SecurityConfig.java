@@ -41,13 +41,13 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-            .securityMatcher("/api/**")
-            .csrf(c -> c.disable())
-            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers("/api/sms/**", "/api/wechat/**").permitAll()  // SMS和微信相关API无需认证
-                .anyRequest().authenticated()
-            );
+                .securityMatcher("/api/**")
+                .csrf(c -> c.disable())
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/api/sms/**", "/api/wechat/**").permitAll()  // SMS和微信相关API无需认证
+                        .anyRequest().authenticated()
+                );
         return http.build();
     }
 
@@ -63,34 +63,34 @@ public class SecurityConfig {
                         .ignoringRequestMatchers("/api/**", "/oauth2/**", "/sms/**", "/wechat/**")
                 )
                 .authorizeHttpRequests(authorize -> authorize
-                                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                                .requestMatchers(
-                                    "/oauth2/**",
-                                    "/web-clients/oauth2/**",
-                                    "/login",
-                                    "/error",
-                                    "/oauth2-test",
-                                    "/oauth2-test-callback",
-                                    "/password/change",
-                                    "/",
-                                    "/static/**",
-                                    "/images/**",
-                                    "/css/**",
-                                    "/js/**",
-                                    "/favicon.ico",   // 避免favicon重定向循环
-                                    "/sms/**",        // SMS登录相关端点
-                                    "/wechat/**"      // 微信登录相关端点
-                                ).permitAll()
-                                .requestMatchers("/user-management")
-                                    .hasAuthority("Users_Read")
-                                .requestMatchers("/group-management")
-                                    .hasAuthority("Roles_Read")
-                                .requestMatchers(
-                                    "/pre-register/**",
-                                    "/authority-management/**"
-                                )
-                                    .hasAuthority("ROLE_ADMIN")
-                                .anyRequest().authenticated()
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(
+                                "/oauth2/**",
+                                "/web-clients/oauth2/**",
+                                "/login",
+                                "/error",
+                                "/oauth2-test",
+                                "/oauth2-test-callback",
+                                "/password/change",
+                                "/",
+                                "/static/**",
+                                "/images/**",
+                                "/css/**",
+                                "/js/**",
+                                "/favicon.ico",   // 避免favicon重定向循环
+                                "/sms/**",        // SMS登录相关端点
+                                "/wechat/**"      // 微信登录相关端点
+                        ).permitAll()
+                        .requestMatchers("/user-management")
+                        .hasAuthority("Users_Read")
+                        .requestMatchers("/group-management")
+                        .hasAuthority("Roles_Read")
+                        .requestMatchers(
+                                "/pre-register/**",
+                                "/authority-management/**"
+                        )
+                        .hasAuthority("ROLE_ADMIN")
+                        .anyRequest().authenticated()
                 )
                 .authenticationProvider(usernamePasswordAuthenticationProvider)
                 .authenticationProvider(smsAuthenticationProvider)

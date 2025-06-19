@@ -27,7 +27,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/sms")
-public class SmsController {
+public class SmsLoginController {
 
     // Constants
     private static final String DEFAULT_CLIENT_ID = "ffv-client";
@@ -36,7 +36,7 @@ public class SmsController {
     private static final String MSG_SMS_AUTH_FAILED = "SMS authentication failed";
     private static final String EXCEPTION_REGISTERED_CLIENT_NOT_FOUND = "Registered client for SMS not found, clientId:";
 
-    private static final Logger logger = LoggerFactory.getLogger(SmsController.class);
+    private static final Logger logger = LoggerFactory.getLogger(SmsLoginController.class);
 
     @Autowired
     private SmsService smsService;

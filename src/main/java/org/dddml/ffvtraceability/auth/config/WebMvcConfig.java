@@ -3,7 +3,6 @@ package org.dddml.ffvtraceability.auth.config;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.dddml.ffvtraceability.auth.jackson.CustomJacksonModule;
 import org.slf4j.Logger;
@@ -18,17 +17,15 @@ import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2A
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
  * Web MVC配置类
- * 
+ * <p>
  * 重要说明：
  * 1. oauth2ObjectMapper - 专用于OAuth2序列化，现在包含HashSet支持以处理CustomUserDetails
  * 2. defaultObjectMapper - 通用ObjectMapper，包含CustomJacksonModule以支持CustomUserDetails等
- * 
+ * <p>
  * 这种双重策略确保OAuth2功能正常工作，同时保持对CustomUserDetails的序列化支持
  */
 @Configuration
@@ -39,22 +36,22 @@ public class WebMvcConfig implements WebMvcConfigurer {
     /**
      * OAuth2专用ObjectMapper - 使用安全的allowlist机制
      * 解决LinkedHashMap转换OAuth2AuthorizationRequest的问题
-     * 
+     * <p>
      * 参考：Spring Security GitHub issue #15491
      */
     @Bean
     public ObjectMapper oauth2ObjectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
-        
+
         // 注册Spring Security和OAuth2相关的模块
         objectMapper.registerModules(SecurityJackson2Modules.getModules(getClass().getClassLoader()));
         objectMapper.registerModule(new OAuth2AuthorizationServerJackson2Module());
-        
+
         // 关键修复：注册我们的安全OAuth2模块来解决LinkedHashMap转换问题
         objectMapper.registerModule(new org.dddml.ffvtraceability.auth.jackson.OAuth2SecurityJacksonModule());
-        
+
         logger.info("OAuth2ObjectMapper configured with OAuth2SecurityJacksonModule for safe deserialization");
-        
+
         return objectMapper;
     }
 
@@ -87,10 +84,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-            .allowedOriginPatterns("*")
-            .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-            .allowedHeaders("*")
-            .allowCredentials(true);
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true);
     }
 }
 
