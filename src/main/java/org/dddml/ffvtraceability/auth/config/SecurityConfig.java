@@ -53,14 +53,22 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain webApiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/**", "/web-sms/**")  // Web管理界面API
+                .securityMatcher("/api/**", "/auth-srv/**", "/web-sms/**")  // Web管理界面API + 旧API路径
                 .csrf(c -> c.disable())  // API禁用CSRF，因为前端会通过headers发送token
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))  // 支持session
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/web-sms/**").permitAll()  // Web SMS验证端点
+                        // 新API路径 (/api/**) 权限配置
                         .requestMatchers("/api/users/**").hasAuthority("Users_Read")
                         .requestMatchers("/api/groups/**").hasAuthority("Roles_Read")
                         .requestMatchers("/api/authorities/**").hasAuthority("ROLE_ADMIN")
+                        // 旧API路径 (/auth-srv/**) 权限配置 - 采用保守策略，全部需要ADMIN权限
+                        .requestMatchers("/auth-srv/users/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/auth-srv/groups/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/auth-srv/authorities/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/auth-srv/password/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/auth-srv/password-tokens/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/auth-srv/emails/**").hasAuthority("ROLE_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(usernamePasswordAuthenticationProvider)
@@ -112,17 +120,17 @@ public class SecurityConfig {
                         .loginPage("/login")
                         .failureHandler(new UsernamePasswordAuthenticationFailureHandler())
                         .successHandler(authenticationSuccessHandler))
-        
-        // SMS认证配置 - 使用现代的 with() 方法替代过时的 apply()
-        .with(new SmsAuthenticationConfigurer<>(), sms -> sms
-                .successHandler(authenticationSuccessHandler)
-                .failureHandler(new SmsAuthenticationFailureHandler()))
-        
-        // 微信认证配置 - 使用现代的 with() 方法替代过时的 apply()
-        .with(new WechatAuthenticationConfigurer<>(), wechat -> wechat
-                .successHandler(authenticationSuccessHandler)
-                .failureHandler(new WechatAuthenticationFailureHandler()));
-                
+
+                // SMS认证配置 - 使用现代的 with() 方法替代过时的 apply()
+                .with(new SmsAuthenticationConfigurer<>(), sms -> sms
+                        .successHandler(authenticationSuccessHandler)
+                        .failureHandler(new SmsAuthenticationFailureHandler()))
+
+                // 微信认证配置 - 使用现代的 with() 方法替代过时的 apply()
+                .with(new WechatAuthenticationConfigurer<>(), wechat -> wechat
+                        .successHandler(authenticationSuccessHandler)
+                        .failureHandler(new WechatAuthenticationFailureHandler()));
+
         return http.build();
     }
 }
