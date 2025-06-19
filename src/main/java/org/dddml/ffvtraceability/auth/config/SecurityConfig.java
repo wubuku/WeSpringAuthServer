@@ -37,17 +37,16 @@ public class SecurityConfig {
     @Autowired
     private AuthenticationSuccessHandler authenticationSuccessHandler;
 
-    // @Bean
-    // @Order(1)
-    // public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws
-    // Exception {
-    // http
-    // .securityMatcher("/api/**")
-    // .authorizeHttpRequests(authorize -> authorize
-    // .anyRequest().authenticated()
-    // );
-    // return http.build();
-    // }
+    @Bean
+    @Order(1)
+    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher("/api/**")
+            .authorizeHttpRequests(authorize -> authorize
+                .anyRequest().authenticated()
+            );
+        return http.build();
+    }
 
     @Bean
     @Order(2)
@@ -59,26 +58,30 @@ public class SecurityConfig {
                 .csrf(c -> c.disable())
                 .authorizeHttpRequests(authorize -> authorize
                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                                // .requestMatchers(
-                                // "/oauth2/**",
-                                // "/web-clients/oauth2/**",
-                                // "/login",
-                                // "/error",
-                                // "/oauth2-test",
-                                // "/oauth2-test-callback",
-                                // "/password/change"
-                                // ).permitAll()
-                                // .requestMatchers("/user-management")
-                                // .hasAuthority("Users_Read")
-                                // .requestMatchers("/group-management")
-                                // .hasAuthority("Roles_Read")
-                                // .requestMatchers(
-                                // "/pre-register/**",
-                                // "/authority-management/**"
-                                // )
-                                // .hasAuthority("ROLE_ADMIN")
-                                .requestMatchers("/**").permitAll()
-                        // .anyRequest().authenticated()
+                                .requestMatchers(
+                                    "/oauth2/**",
+                                    "/web-clients/oauth2/**",
+                                    "/login",
+                                    "/error",
+                                    "/oauth2-test",
+                                    "/oauth2-test-callback",
+                                    "/password/change",
+                                    "/",
+                                    "/static/**",
+                                    "/images/**",
+                                    "/css/**",
+                                    "/js/**"
+                                ).permitAll()
+                                .requestMatchers("/user-management")
+                                    .hasAuthority("Users_Read")
+                                .requestMatchers("/group-management")
+                                    .hasAuthority("Roles_Read")
+                                .requestMatchers(
+                                    "/pre-register/**",
+                                    "/authority-management/**"
+                                )
+                                    .hasAuthority("ROLE_ADMIN")
+                                .anyRequest().authenticated()
                 )
                 .authenticationProvider(usernamePasswordAuthenticationProvider)
                 .authenticationProvider(smsAuthenticationProvider)
