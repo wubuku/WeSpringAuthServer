@@ -37,6 +37,9 @@ public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         }
 
         String originalUrl = request.getParameter("continue");
+        
+        // 验证原始URL是否安全
+        originalUrl = validateAndSanitizeUrl(originalUrl);
 
         // 检查是否需要修改密码
         if (userDetails.isPasswordChangeRequired() ||
@@ -60,5 +63,50 @@ public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         }
 
         super.onAuthenticationSuccess(request, response, authentication);
+    }
+
+    /**
+     * 验证并清理重定向URL，防止开放重定向攻击和Chrome DevTools URL问题
+     */
+    private String validateAndSanitizeUrl(String url) {
+        if (!StringUtils.hasText(url)) {
+            return null;
+        }
+
+        // 过滤掉Chrome DevTools相关的URL
+        if (url.contains("chrome.devtools") || 
+            url.contains(".well-known/appspecific") ||
+            url.startsWith("chrome://") ||
+            url.startsWith("chrome-extension://")) {
+            logger.debug("Blocked Chrome DevTools URL: {}", url);
+            return null;
+        }
+
+        // 确保URL是相对路径或本域名路径
+        if (url.startsWith("/")) {
+            // 相对路径，安全
+            return url;
+        }
+
+        // 如果是绝对URL，检查是否是本域名
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            try {
+                java.net.URI uri = java.net.URI.create(url);
+                String host = uri.getHost();
+                // 只允许localhost和127.0.0.1
+                if ("localhost".equals(host) || "127.0.0.1".equals(host)) {
+                    return url;
+                }
+                logger.warn("Blocked external URL redirect: {}", url);
+                return null;
+            } catch (Exception e) {
+                logger.warn("Invalid URL format: {}", url);
+                return null;
+            }
+        }
+
+        // 其他格式的URL，为安全起见拒绝
+        logger.debug("Blocked unrecognized URL format: {}", url);
+        return null;
     }
 } 

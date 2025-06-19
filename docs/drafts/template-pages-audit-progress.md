@@ -91,6 +91,9 @@
 
 ### 新增功能：
 7. **SmsLoginController**: 新增 `/sms/verify` 端点用于Web页面SMS验证
+   - ✅ 修复为接收JSON请求体格式 (匹配页面逻辑)
+   - ✅ 添加Spring Security会话创建逻辑
+   - ✅ send-code端点也修改为支持JSON格式
 
 ### ✅ **现在所有页面的API调用应该正常工作**：
 - `/api/authorities/*` → ✅ 可用
