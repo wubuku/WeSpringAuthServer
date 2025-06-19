@@ -52,8 +52,9 @@
    - **修复**: 所有密码日志改为[HIDDEN]，只记录长度等非敏感信息
 
 2. **缺少安全头配置** ✅ **已修复**
-   - **问题**: 没有配置X-Frame-Options、HSTS等安全头
-   - **修复**: 添加frameOptions().deny()、contentTypeOptions()、HSTS等安全头
+   - **问题**: 没有配置X-Frame-Options等安全头
+   - **修复**: 添加frameOptions().deny()、contentTypeOptions()等安全头
+   - **注意**: 不设置HSTS，生产环境由负载均衡器处理HTTPS
 
 3. **文件上传安全加强** ✅ **已修复**
    - **问题**: CSV上传缺少文件大小限制和路径验证
@@ -112,8 +113,8 @@
 ### 🛡️ 安全防护加强
 - ✅ X-Frame-Options: DENY
 - ✅ X-Content-Type-Options: nosniff  
-- ✅ HSTS强制HTTPS（生产环境）
 - ✅ Referrer-Policy安全配置
+- 📋 HSTS由负载均衡器处理（生产环境）
 
 ### ⚡ 确认安全实现
 - ✅ SQL注入防护：参数化查询

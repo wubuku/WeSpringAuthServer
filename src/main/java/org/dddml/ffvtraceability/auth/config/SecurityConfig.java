@@ -86,10 +86,7 @@ public class SecurityConfig {
                 .headers(headers -> headers
                         .frameOptions().deny()  // 防止点击劫持
                         .contentTypeOptions().and()   // 防止MIME类型混淆攻击
-                        .httpStrictTransportSecurity(hstsConfig -> hstsConfig
-                                .maxAgeInSeconds(31536000)  // HSTS 1年
-                                .includeSubDomains(true)    // 包含子域名
-                        )
+                        // 注意：不设置HSTS，因为生产环境由负载均衡器处理HTTPS
                         .referrerPolicy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)
                 )
                 .authorizeHttpRequests(authorize -> authorize

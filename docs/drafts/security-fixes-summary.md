@@ -35,10 +35,7 @@
 .headers(headers -> headers
     .frameOptions().deny()  // 防点击劫持
     .contentTypeOptions()   // 防MIME混淆
-    .httpStrictTransportSecurity(hstsConfig -> hstsConfig
-        .maxAgeInSeconds(31536000)
-        .includeSubDomains(true)
-    )
+    // 注意：不设置HSTS，生产环境由负载均衡器处理HTTPS
     .referrerPolicy(STRICT_ORIGIN_WHEN_CROSS_ORIGIN)
 )
 ```
