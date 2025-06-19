@@ -94,10 +94,12 @@ public class SecurityConfig {
                                 "/wechat/**",
                                 "/.well-known/**"
                         ).permitAll()
-                        .requestMatchers("/user-management", "/auth-srv/user-management").hasAuthority("Users_Read")
-                        .requestMatchers("/group-management", "/auth-srv/group-management").hasAuthority("Roles_Read")
+                        .requestMatchers("/user-management", "/auth-srv/user-management")
+                        .hasAuthority("Users_Read")
+                        .requestMatchers("/group-management", "/auth-srv/group-management")
+                        .hasAuthority("Roles_Read")
                         .requestMatchers(
-                                "/pre-register/**",
+                                "/pre-register", "/pre-register/**", "/auth-srv/pre-register",
                                 "/authority-management/**",
                                 "/auth-srv/authority-management/**"
                         ).hasAuthority("ROLE_ADMIN")
