@@ -109,17 +109,17 @@ public class SecurityConfig {
                 .formLogin(form -> form
                         .loginPage("/login")
                         .failureHandler(new UsernamePasswordAuthenticationFailureHandler())
-                        .successHandler(authenticationSuccessHandler));
+                        .successHandler(authenticationSuccessHandler))
         
-        // SMS认证配置
-        http.apply(new SmsAuthenticationConfigurer<>())
+        // SMS认证配置 - 使用现代的 with() 方法替代过时的 apply()
+        .with(new SmsAuthenticationConfigurer<>(), sms -> sms
                 .successHandler(authenticationSuccessHandler)
-                .failureHandler(new SmsAuthenticationFailureHandler());
+                .failureHandler(new SmsAuthenticationFailureHandler()))
         
-        // 微信认证配置
-        http.apply(new WechatAuthenticationConfigurer<>())
+        // 微信认证配置 - 使用现代的 with() 方法替代过时的 apply()
+        .with(new WechatAuthenticationConfigurer<>(), wechat -> wechat
                 .successHandler(authenticationSuccessHandler)
-                .failureHandler(new WechatAuthenticationFailureHandler());
+                .failureHandler(new WechatAuthenticationFailureHandler()));
                 
         return http.build();
     }
