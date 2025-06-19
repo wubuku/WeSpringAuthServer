@@ -134,3 +134,5 @@ cookies.txt
 cookies*.txt
 session.env
 tokens.env
+test-*.txt
+csrf_token.txt

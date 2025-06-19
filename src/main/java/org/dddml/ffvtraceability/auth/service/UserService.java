@@ -247,17 +247,29 @@ public class UserService {
         } catch (Exception exception) {
             throw new UsernameNotFoundException("User not found: " + username);
         }
+        // 获取用户权限：包括组权限和直接分配的权限
         String sqlAuthorities = """
-                    SELECT DISTINCT ad.authority_id
-                    FROM authority_definitions ad
-                    JOIN group_authorities ga ON ad.authority_id = ga.authority
-                    JOIN group_members gm ON ga.group_id = gm.group_id
-                    WHERE gm.username = ?
+                    SELECT DISTINCT authority FROM (
+                        -- 从组获取的权限
+                        SELECT DISTINCT ad.authority_id as authority
+                        FROM authority_definitions ad
+                        JOIN group_authorities ga ON ad.authority_id = ga.authority
+                        JOIN group_members gm ON ga.group_id = gm.group_id
+                        WHERE gm.username = ?
+                        
+                        UNION
+                        
+                        -- 直接分配给用户的权限
+                        SELECT DISTINCT a.authority
+                        FROM authorities a
+                        WHERE a.username = ?
+                    ) combined_authorities
                 """;
         List<String> authorities;
         try {
-            authorities = jdbcTemplate.queryForList(sqlAuthorities, String.class, username);
+            authorities = jdbcTemplate.queryForList(sqlAuthorities, String.class, username, username);
         } catch (Exception exception) {
+            logger.error("Failed to load authorities for user: {}", username, exception);
             authorities = new ArrayList<>();
         }
         List<String> groupNames;
@@ -279,6 +291,10 @@ public class UserService {
         for (String authority : authorities) {
             grantedAuthorities.add(new SimpleGrantedAuthority(authority));
         }
+        
+        // 添加调试日志
+        logger.debug("User {} loaded with authorities: {}", username, authorities);
+        logger.debug("User {} loaded with groups: {}", username, groupNames);
         OffsetDateTime passwordLastChanged = OffsetDateTimeUtil.toOffsetDateTime(userInfo.get("password_last_changed"));
 
         return new CustomUserDetails(

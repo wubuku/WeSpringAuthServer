@@ -1,7 +1,6 @@
 package org.dddml.ffvtraceability.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.exception.AuthenticationException;
 import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
@@ -23,8 +22,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * SMS相关API控制器
- * 处理短信验证码发送和短信登录功能
+ * SMS登录控制器 - 专为微信小程序等移动端设计
+ * 提供无状态的SMS验证码服务，返回OAuth2 token
+ * 
+ * 注意：此控制器的所有端点都是无状态的，适用于：
+ * - 微信小程序
+ * - 移动APP
+ * - 第三方API调用
+ * 
+ * 不要在此控制器中添加需要session的端点！
  */
 @RestController
 @RequestMapping({"/sms", "/api/sms"})
@@ -34,8 +40,8 @@ public class SmsLoginController {
     private static final String DEFAULT_CLIENT_ID = "ffv-client";
     private static final String CONTENT_TYPE_JSON = "application/json;charset=UTF-8";
     private static final String ERROR_AUTHENTICATION_FAILED = "authentication_failed";
-    private static final String MSG_SMS_AUTH_FAILED = "SMS authentication failed";
-    private static final String EXCEPTION_REGISTERED_CLIENT_NOT_FOUND = "Registered client for SMS not found, clientId:";
+    private static final String MSG_SMS_AUTH_FAILED = "SMS authentication failed: ";
+    private static final String EXCEPTION_REGISTERED_CLIENT_NOT_FOUND = "Registered client for SMS not found, clientId: ";
 
     private static final Logger logger = LoggerFactory.getLogger(SmsLoginController.class);
 
@@ -49,8 +55,8 @@ public class SmsLoginController {
     private RegisteredClientRepository registeredClientRepository;
 
     /**
-     * Send SMS verification code - 从 SocialLoginController 移动过来
-     * 支持JSON格式请求以兼容Web页面
+     * 发送SMS验证码 - 微信小程序使用
+     * 无状态API，支持JSON格式请求
      */
     @PostMapping("/send-code")
     @ResponseBody
@@ -89,7 +95,8 @@ public class SmsLoginController {
     }
 
     /**
-     * SMS登录端点 - 从SocialLoginController移动过来
+     * SMS登录认证 - 微信小程序使用
+     * 无状态API，返回OAuth2 access_token和refresh_token
      */
     @GetMapping("/auth")
     public void smsAuth(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
@@ -113,6 +120,7 @@ public class SmsLoginController {
 
     /**
      * SMS登录端点 - 为其他合作方保留的兼容性端点
+     * 无状态API，与 /auth 端点功能完全相同
      */
     @GetMapping("/login")
     public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
@@ -121,58 +129,6 @@ public class SmsLoginController {
                          HttpServletResponse response) throws IOException {
         // 直接调用 smsAuth 方法，保持完全相同的逻辑
         smsAuth(clientId, mobileNumber, verificationCode, response);
-    }
-
-    /**
-     * SMS验证端点 - 为Web页面登录提供验证服务
-     * 接收JSON请求，验证成功后创建登录会话
-     */
-    @PostMapping("/verify")
-    @ResponseBody
-    public ResponseEntity<Map<String, Object>> verifySmsCode(@RequestBody Map<String, String> request,
-                                                             HttpServletRequest httpRequest,
-                                                             HttpServletResponse httpResponse) {
-        Map<String, Object> response = new HashMap<>();
-        
-        String phoneNumber = request.get("phoneNumber");
-        String code = request.get("code");
-
-        if (phoneNumber == null || phoneNumber.isEmpty() || code == null || code.isEmpty()) {
-            response.put("success", false);
-            response.put("message", "Phone number and verification code are required");
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        try {
-            CustomUserDetails userDetails = smsVerificationService.processSmsLogin(phoneNumber, code);
-            if (userDetails != null) {
-                // 创建登录会话 - 使用Spring Security的方式
-                org.springframework.security.authentication.UsernamePasswordAuthenticationToken authToken = 
-                    new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
-                
-                org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(authToken);
-                
-                // 保存到session
-                httpRequest.getSession().setAttribute(
-                    org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                    org.springframework.security.core.context.SecurityContextHolder.getContext()
-                );
-
-                response.put("success", true);
-                response.put("message", "Verification successful");
-                return ResponseEntity.ok(response);
-            } else {
-                response.put("success", false);
-                response.put("message", "Invalid verification code or expired");
-                return ResponseEntity.badRequest().body(response);
-            }
-        } catch (Exception e) {
-            logger.error("SMS verification failed for phone: {}", phoneNumber, e);
-            response.put("success", false);
-            response.put("message", "Verification failed: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
     }
 
     // Private helper methods

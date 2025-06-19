@@ -8,10 +8,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 @Controller
-@RequestMapping("/auth-srv")
 public class UserManagementViewController {
 
-    @GetMapping("/user-management")
+    @GetMapping({"/auth-srv/user-management", "/user-management"})
     //@PreAuthorize("hasRole('ADMIN')")
     public String userManagementPage(Model model) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

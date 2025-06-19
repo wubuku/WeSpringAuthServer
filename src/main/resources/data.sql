@@ -33,6 +33,12 @@ ON CONFLICT (username) DO NOTHING;
 INSERT INTO authorities (username, authority) VALUES ('admin', 'ROLE_ADMIN')
 ON CONFLICT (username, authority) DO NOTHING;
 
+-- 给 admin 用户添加访问管理页面所需的权限
+INSERT INTO authorities (username, authority) VALUES 
+    ('admin', 'Users_Read'),
+    ('admin', 'Roles_Read')
+ON CONFLICT (username, authority) DO NOTHING;
+
 -- 设置组权限 (注释掉以避免重复插入错误)
 -- INSERT INTO group_authorities (group_id, authority) VALUES 
 --     (1, 'ROLE_ADMIN'),

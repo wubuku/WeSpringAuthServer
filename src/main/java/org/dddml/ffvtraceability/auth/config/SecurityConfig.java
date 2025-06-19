@@ -1,6 +1,5 @@
 package org.dddml.ffvtraceability.auth.config;
 
-import jakarta.servlet.Filter;
 import org.dddml.ffvtraceability.auth.authentication.*;
 import org.dddml.ffvtraceability.auth.security.handler.CustomAuthenticationSuccessHandler;
 import org.slf4j.Logger;
@@ -39,29 +38,42 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain mobileApiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/**")
+                .securityMatcher("/sms/**", "/wechat/**", "/api/sms/**")  // 微信小程序和移动端API
                 .csrf(c -> c.disable())
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))  // 无状态
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/sms/**", "/api/wechat/**").permitAll()  // SMS和微信相关API无需认证
-                        .anyRequest().authenticated()
+                        .anyRequest().permitAll()  // 这些端点有自己的业务逻辑验证
                 );
         return http.build();
     }
 
     @Bean
     @Order(2)
+    public SecurityFilterChain webApiSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/api/**", "/web-sms/**")  // Web管理界面API
+                .csrf(c -> c.disable())  // API禁用CSRF，因为前端会通过headers发送token
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))  // 支持session
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/web-sms/**").permitAll()  // Web SMS验证端点
+                        .requestMatchers("/api/users/**").hasAuthority("Users_Read")
+                        .requestMatchers("/api/groups/**").hasAuthority("Roles_Read")
+                        .requestMatchers("/api/authorities/**").hasAuthority("ROLE_ADMIN")
+                        .anyRequest().authenticated()
+                )
+                .authenticationProvider(usernamePasswordAuthenticationProvider)
+                .httpBasic(basic -> basic.realmName("FFV Auth Server API"));
+        return http.build();
+    }
+
+    @Bean
+    @Order(3)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource))
-                .sessionManagement(s -> s
-                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
-                )
-                // CSRF保护启用，对API端点、OAuth2端点、SMS和微信端点禁用
-                .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/api/**", "/oauth2/**", "/sms/**", "/wechat/**")
-                )
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/oauth2/**", "/sms/**", "/wechat/**"))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
@@ -77,20 +89,18 @@ public class SecurityConfig {
                                 "/images/**",
                                 "/css/**",
                                 "/js/**",
-                                "/favicon.ico",   // 避免favicon重定向循环
-                                "/sms/**",        // SMS登录相关端点
-                                "/wechat/**",     // 微信登录相关端点
-                                "/.well-known/**" // Chrome DevTools自动工作空间功能
+                                "/favicon.ico",
+                                "/sms/**",
+                                "/wechat/**",
+                                "/.well-known/**"
                         ).permitAll()
-                        .requestMatchers("/user-management")
-                        .hasAuthority("Users_Read")
-                        .requestMatchers("/group-management")
-                        .hasAuthority("Roles_Read")
+                        .requestMatchers("/user-management", "/auth-srv/user-management").hasAuthority("Users_Read")
+                        .requestMatchers("/group-management", "/auth-srv/group-management").hasAuthority("Roles_Read")
                         .requestMatchers(
                                 "/pre-register/**",
-                                "/authority-management/**"
-                        )
-                        .hasAuthority("ROLE_ADMIN")
+                                "/authority-management/**",
+                                "/auth-srv/authority-management/**"
+                        ).hasAuthority("ROLE_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(usernamePasswordAuthenticationProvider)
@@ -99,20 +109,18 @@ public class SecurityConfig {
                 .formLogin(form -> form
                         .loginPage("/login")
                         .failureHandler(new UsernamePasswordAuthenticationFailureHandler())
-                        .successHandler(authenticationSuccessHandler))
-                .apply(new SmsAuthenticationConfigurer<>())
+                        .successHandler(authenticationSuccessHandler));
+        
+        // SMS认证配置
+        http.apply(new SmsAuthenticationConfigurer<>())
                 .successHandler(authenticationSuccessHandler)
                 .failureHandler(new SmsAuthenticationFailureHandler());
+        
+        // 微信认证配置
         http.apply(new WechatAuthenticationConfigurer<>())
                 .successHandler(authenticationSuccessHandler)
                 .failureHandler(new WechatAuthenticationFailureHandler());
-        SecurityFilterChain securityFilterChain = http.build();
-        for (Filter filter : securityFilterChain.getFilters()) {
-            if (filter instanceof SmsAuthenticationFilter || filter instanceof WechatAuthenticationFilter) {
-                securityFilterChain.getFilters().remove(filter);
-                break;
-            }
-        }
-        return securityFilterChain;
+                
+        return http.build();
     }
 }

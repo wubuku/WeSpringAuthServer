@@ -276,7 +276,7 @@
             sendCodeBtn.disabled = true;
             sendCodeBtn.textContent = 'Sending...';
             
-            fetch('/api/sms/send-code', {
+            fetch('/web-sms/send-code', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -322,7 +322,7 @@
                 return;
             }
             
-            fetch('/api/sms/verify', {
+            fetch('/web-sms/verify', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
