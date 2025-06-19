@@ -27,7 +27,7 @@ public class PasswordTokenService {
     }
 
 
-    public void savePermissionToken(String username, String token, String type, OffsetDateTime now) {
+    public void saveAuthorizationToken(String username, String token, String type, OffsetDateTime now) {
         if (now == null) {
             now = OffsetDateTime.now();
         }

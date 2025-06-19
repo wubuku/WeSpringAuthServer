@@ -33,7 +33,18 @@ public class UserDto {
     private OffsetDateTime updatedAt;
     private String createdBy;
     private String updatedBy;
-    private List<String> permissions;
+    /**
+     * 用户拥有的权限列表
+     * 存储来自 authority_definitions 表的 authority_id
+     * 与 Spring Security 的 authorities 概念保持一致
+     */
+    private List<String> authorities;
+    
+    /**
+     * 用户所属的组ID列表
+     * 用于用户组管理功能
+     */
+    private List<Long> groupIds;
 
     public OffsetDateTime getTempPasswordLastGenerated() {
         return TempPasswordLastGenerated;
@@ -43,12 +54,12 @@ public class UserDto {
         TempPasswordLastGenerated = tempPasswordLastGenerated;
     }
 
-    public List<String> getPermissions() {
-        return permissions;
+    public List<String> getAuthorities() {
+        return authorities;
     }
 
-    public void setPermissions(List<String> permissions) {
-        this.permissions = permissions;
+    public void setAuthorities(List<String> authorities) {
+        this.authorities = authorities;
     }
 
     public OffsetDateTime getCreatedAt() {
@@ -241,5 +252,13 @@ public class UserDto {
 
     public void setProfileImageUrl(String profileImageUrl) {
         this.profileImageUrl = profileImageUrl;
+    }
+
+    public List<Long> getGroupIds() {
+        return groupIds;
+    }
+
+    public void setGroupIds(List<Long> groupIds) {
+        this.groupIds = groupIds;
     }
 }

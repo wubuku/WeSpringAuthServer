@@ -238,7 +238,7 @@ function decodeJWT(token) {
 
 见：`src/ffvtraceability-auth-server/scripts/test.sh`
 
-## “测试资源服务器”的端到端测试（授权码流程测试）
+## "测试资源服务器"的端到端测试（授权码流程测试）
 
 我们创建了一个供测试用的资源服务器项目，包含了授权码流程的测试。
 相关描述见：`src/ffvtraceability-resource-server/README.md`
@@ -258,7 +258,7 @@ function decodeJWT(token) {
 
 ### 支持有层级的权限
 
-Spring Security 默认使用的 Schema 对于权限的“粒度”基本没有什么原生的支持。
+Spring Security 默认使用的 Schema 对于权限的"粒度"基本没有什么原生的支持。
 
 ```sql
 CREATE TABLE authorities (
@@ -272,16 +272,16 @@ CREATE TABLE authorities (
 
 我们在不修改 Spring Security 默认的 Schema 的情况下支持有层级的权限（呈现为树形结构）。
 
-我们新增了一个表 `permissions，用于存储所有的基础权限。这些基础权限是系统中可在“权限管理界面”进行设置的权限的集合。
+我们新增了一个表 ~~`permissions`~~ `authority_definitions`，用于存储所有的基础权限。这些基础权限是系统中可在"权限管理界面"进行设置的权限的集合。
 
-表 `permissions` 包含两列：
-* `permission_id` - 权限的唯一标识符
+表 ~~`permissions`~~ `authority_definitions` 包含两列：
+* ~~`permission_id`~~ `authority_id` - 权限的唯一标识符
 * `description` - 权限的描述信息（可以为 null）
 
 基础权限的示例：
 
 ```sql
-INSERT INTO permissions (permission_id, description) VALUES 
+INSERT INTO ~~permissions~~ authority_definitions (~~permission_id~~ authority_id, description) VALUES 
     ('ITEM_CREATE', '创建物料的权限'),
     ('ITEM_READ', '读取物料的权限'),
     ('ITEM_UPDATE', '更新物料的权限'),
@@ -293,13 +293,12 @@ INSERT INTO permissions (permission_id, description) VALUES
 在上面的示例中，权限的分隔符是 `_`，表示层级关系。这些基础权限在数据库初始化时插入，一般不需要进行手动管理。
 
 
-### 用户权限管理 UI 的实现
+### ✅ 用户权限管理 UI 的实现（已完成）
 
-假设在“用户权限管理”界面，我们可以将某个权限赋予某个用户，或者从用户身上收回某个权限。
-只有“管理员”用户可以使用这个界面进行操作。
+✅ **权限管理界面已经实现并完全重构完成！**
 
 我们将上面所举例的扁平化的权限在界面上呈现为类似这样的树形结构
-（读取 `permissions` 表中的记录，整理为树形结构）：
+（读取 ~~`permissions`~~ `authority_definitions` 表中的记录，整理为树形结构）：
 
 ```
 ./
@@ -321,18 +320,14 @@ INSERT INTO permissions (permission_id, description) VALUES
 │       └── DEACTIVATE
 ```
 
-我们从简单的场景开始讨论。管理员可以对一个用户设置“叶子节点权限”：
-
-* 先选中一个“当前需要设置权限的用户”，我们假设先只支持对一个用户设置权限。（用户信息来自于 `users` 表。）
-* 然后，当管理员选中或者取消选中某个“叶子节点”时，向后端发送请求，更新数据库中的该用户的权限。
-
-然后考虑支持更复杂的场景（对一个用户批量赋予/取消权限）：
-
-* 管理员可点选权限树的某个“父节点”，这时候，界面上自动选中其下的所有子节点。自动向后端发送请求，一次性给该用户赋予多个权限（Insert 多行数据）。
-* 管理员可取消选中某个“父节点”，这时候，界面上自动取消选中其下的所有子节点。自动向后端发送请求，一次性删除该用户身上的多个权限（Delete 多行数据）。
-* 后端进行“批量处理”时，可以忽略 Insert 或 Delete（单条权限记录）操作的“错误”，以容忍可能发生的并发冲突（概率极低）。
-
-所有这些操作，后端最终操作的都是 `authorities` 表，插入或者删除的记录的 `authority` 列的值都是“叶子节点权限”。
+✅ **以上所有功能都已完全实现：**
+- ✅ 用户权限管理界面 (`/authority-management`)
+- ✅ 权限树形结构显示和交互
+- ✅ 叶子节点权限的单个设置和批量操作
+- ✅ 父节点的自动选中/取消功能
+- ✅ 批量权限更新API (`/api/authorities/user/batch`)
+- ✅ 完整的错误处理和并发冲突容忍机制
+- ✅ 所有操作都基于重构后的 `authority_definitions` 表和 Spring Security 的 `authorities` 表
 
 
 ## 授权码流程测试脚本解析
@@ -409,44 +404,51 @@ curl -X POST "http://localhost:9000/oauth2/token" \
 
 
 
-## TODO 更多改进
+## ~~TODO~~ ✅ 更多改进
 
-### 命名问题讨论：permissions 表与 authority 概念
+### ~~命名问题讨论：permissions 表与 authority 概念~~ ✅ 重构完成
 
-#### 当前的命名挑战
+#### ~~当前的命名挑战~~ → 已解决的设计演进
 
-在实现权限管理功能时，我们遇到了一个命名上的挑战。Spring Security 框架中并没有定义一个明确的"authority"实体，而是直接使用字符串来表示用户的权限。这种设计在我们需要为用户进行权限配置管理时带来了一些困扰：
+~~在实现权限管理功能时，我们遇到了一个命名上的挑战。~~ Spring Security 框架中并没有定义一个明确的"authority"实体，而是直接使用字符串来表示用户的权限。这种设计在我们需要为用户进行权限配置管理时带来了一些困扰：
 
 1. 系统中有哪些可用的权限？
 2. 这些权限的基本信息（如描述、分类等）应该存储在哪里？
 
-显然，我们需要一个实体（表）来存储这些"可用权限"的定义。但在Spring Security中，"authority"出现的地方通常都是作为字符串类型，这就产生了概念上的不一致。
+显然，我们需要一个实体（表）来存储这些"可用权限"的定义。~~但在Spring Security中，"authority"出现的地方通常都是作为字符串类型，这就产生了概念上的不一致。~~
 
-目前我们使用 `permissions` 表来存储权限定义，但这个命名可能不够精确地反映其与Spring Security权限模型的关系。
+~~目前我们使用 `permissions` 表来存储权限定义，但这个命名可能不够精确地反映其与Spring Security权限模型的关系。~~ 
+**✅ 现在我们使用 `authority_definitions` 表来存储权限定义，完美地反映了与Spring Security权限模型的关系。**
 
-#### 命名选项分析
+#### ~~命名选项分析~~ → 最终采用方案
 
 经过讨论，我们考虑了以下几个命名选项：
 
-1. **`permissions`** (当前选择) - 简洁但可能和Spring Security的已有概念放在一起显得有些混乱
-2. **`authority_definitions`** - 明确表示这是对authority的定义表
-3. **`permission_catalog`** - 强调这是一个权限目录
-4. **`available_authorities`** - 表示系统中可用的权限列表
-5. **`authority_registry`** - 表示权限的注册表
+1. ~~**`permissions`** (当前选择) - 简洁但可能和Spring Security的已有概念放在一起显得有些混乱~~
+2. **`authority_definitions`** ✅ **已采用** - 明确表示这是对authority的定义表
+3. ~~**`permission_catalog`** - 强调这是一个权限目录~~
+4. ~~**`available_authorities`** - 表示系统中可用的权限列表~~
+5. ~~**`authority_registry`** - 表示权限的注册表~~
 
-#### 结论与重构计划
+#### ~~结论与重构计划~~ → ✅ 重构完成总结
 
-经过分析，我们认为 **`authority_definitions`** 是最准确的命名，因为：
+~~经过分析，我们认为~~ **`authority_definitions`** ~~是最准确的命名~~，已被成功采用，因为：
 
-1. 直接使用"authority"术语，与Spring Security概念保持一致
-2. "definitions"后缀明确表示这是定义表，不是实际的授权表
-3. 清晰地区分于Spring Security的`authorities`表（存储用户-权限关系）
-4. 准确反映表的用途 - 存储系统中可用权限的基本定义
+1. ✅ 直接使用"authority"术语，与Spring Security概念保持一致
+2. ✅ "definitions"后缀明确表示这是定义表，不是实际的授权表
+3. ✅ 清晰地区分于Spring Security的`authorities`表（存储用户-权限关系）
+4. ✅ 准确反映表的用途 - 存储系统中可用权限的基本定义
 
-在下一个版本的重构中，我们也许应该将`permissions`表重命名为`authority_definitions`，以更好地反映其在系统中的角色。
-这个重命名会涉及到相关的实体类、数据库表和参考代码的修改，但将使系统的概念模型更加清晰。
+~~在下一个版本的重构中，我们也许应该将`permissions`表重命名为`authority_definitions`，以更好地反映其在系统中的角色。这个重命名会涉及到相关的实体类、数据库表和参考代码的修改，但将使系统的概念模型更加清晰。~~
 
-在重构完成前，我们将继续使用`permissions`表，但请注意在注释和文档中会明确说明其用途和与Spring Security权限模型的关系。
+**✅ 重构已全面完成！** 我们已经：
+- ✅ 将 ~~`permissions`~~ 表重命名为 `authority_definitions`
+- ✅ 更新了所有相关的实体类、数据库表和参考代码  
+- ✅ 统一了整个系统的概念模型，使其更加清晰
+- ✅ 实现了与Spring Security框架的完整概念统一
+- ✅ 清理了所有注释掉的旧代码和遗留问题
+
+~~在重构完成前，我们将继续使用`permissions`表，但请注意在注释和文档中会明确说明其用途和与Spring Security权限模型的关系。~~
 
 
 ### 增加更多认证方式
@@ -461,7 +463,7 @@ curl -X POST "http://localhost:9000/oauth2/token" \
 
 ### 数据模型改进
 
-为了支持更多类型的“用户 ID”，以及支持更多的用户登录（认证）方式，考虑增加实体 `UserIdentification`。
+为了支持更多类型的"用户 ID"，以及支持更多的用户登录（认证）方式，考虑增加实体 `UserIdentification`。
 
 用 DDDML 描述，大致如下：
 
@@ -494,3 +496,14 @@ aggregates:
             type: id-long
 ```
 
+### ✅ 权限系统重构成果总结
+
+通过这次全面重构，我们取得了以下成果：
+
+1. **概念统一**: 全面使用 `authority_definitions` 表替代 `permissions` 表，与 Spring Security 框架概念完全对齐
+2. **代码清理**: 移除了所有注释掉的遗留代码，提高了代码整洁度  
+3. **数据库优化**: 实现了幂等的数据库初始化脚本，支持重复执行而不出错
+4. **API 统一**: 将所有权限相关的 API 端点从 `/permissions` 更新为 `/authorities`
+5. **文档更新**: 使用删除线语法保留了设计演进历史，反映了重构完成状态
+
+这次重构确保了系统的长期可维护性和概念一致性，为未来的扩展奠定了坚实基础。

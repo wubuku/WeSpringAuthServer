@@ -39,14 +39,14 @@ public class GroupManagementApiController {
             groups = jdbcTemplate.query(sql.toString(), new GroupDtoMapper());
         }
         groups.forEach(group -> {
-            String sqlGetPermissions = """
+            String sqlGetAuthorities = """
                     SELECT ga.authority 
                     FROM group_authorities ga
-                    JOIN permissions p ON ga.authority = p.permission_id
+                    JOIN authority_definitions ad ON ga.authority = ad.authority_id
                     WHERE ga.group_id = ? 
-                    AND (p.enabled IS NULL OR p.enabled = true)
+                    AND (ad.enabled IS NULL OR ad.enabled = true)
                     """;
-            group.setPermissions(jdbcTemplate.queryForList(sqlGetPermissions, String.class, group.getId()));
+            group.setAuthorities(jdbcTemplate.queryForList(sqlGetAuthorities, String.class, group.getId()));
         });
         return groups;
     }

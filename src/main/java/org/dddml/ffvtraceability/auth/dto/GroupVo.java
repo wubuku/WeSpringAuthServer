@@ -8,14 +8,19 @@ import java.util.List;
 public class GroupVo {
     private String groupName;
     private String description;
-    private List<String> permissions;
+    /**
+     * 组拥有的权限列表
+     * 存储来自 authority_definitions 表的 authority_id
+     * 与 Spring Security 的 authorities 概念保持一致
+     */
+    private List<String> authorities;
 
-    public List<String> getPermissions() {
-        return permissions;
+    public List<String> getAuthorities() {
+        return authorities;
     }
 
-    public void setPermissions(List<String> permissions) {
-        this.permissions = permissions;
+    public void setAuthorities(List<String> authorities) {
+        this.authorities = authorities;
     }
 
     public String getDescription() {

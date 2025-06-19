@@ -6,8 +6,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class AuthorityDefinitionsViewController {
 
-    @GetMapping("/permission-settings")
-    public String permissionSettingsPage() {
-        return "permission-settings";
+    @GetMapping("/authority-settings")
+    public String authorityDefinitionsPage() {
+        return "authority-settings";
     }
 }

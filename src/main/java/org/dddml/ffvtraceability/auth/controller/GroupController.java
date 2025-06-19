@@ -56,17 +56,17 @@ public class GroupController {
         params.put("enabled", true);
         Number id = insert.executeAndReturnKey(params);
 
-        if (groupVo.getPermissions() == null) {
-            groupVo.setPermissions(new ArrayList<>());
+        if (groupVo.getAuthorities() == null) {
+            groupVo.setAuthorities(new ArrayList<>());
         } else {
-            groupVo.setPermissions(groupVo.getPermissions().stream()
-                    .filter(permission -> Objects.nonNull(permission) && !permission.isBlank())
+            groupVo.setAuthorities(groupVo.getAuthorities().stream()
+                    .filter(authority -> Objects.nonNull(authority) && !authority.isBlank())
                     .distinct().collect(Collectors.toList()));
             // 批量插入权限
             jdbcTemplate.batchUpdate(
                     "INSERT INTO group_authorities (group_id, authority) VALUES (?, ?)",
-                    groupVo.getPermissions().stream()
-                            .map(permission -> new Object[]{id.longValue(), permission})
+                    groupVo.getAuthorities().stream()
+                            .map(authority -> new Object[]{id.longValue(), authority})
                             .collect(Collectors.toList())
             );
         }
@@ -75,7 +75,7 @@ public class GroupController {
         groupDto.setDescription(description);
         groupDto.setId(id.longValue());
         groupDto.setEnabled(true);
-        groupDto.setPermissions(groupVo.getPermissions());
+        groupDto.setAuthorities(groupVo.getAuthorities());
         return groupDto;
     }
 
@@ -87,14 +87,14 @@ public class GroupController {
         if (groupDto == null) {
             throw new BusinessException("Group not found with id: " + groupId);
         }
-        String sqlGetPermissions = """
+        String sqlGetAuthorities = """
                 SELECT ga.authority 
                 FROM group_authorities ga
-                JOIN permissions p ON ga.authority = p.permission_id
+                JOIN authority_definitions ad ON ga.authority = ad.authority_id
                 WHERE ga.group_id = ? 
-                AND (p.enabled IS NULL OR p.enabled = true)
+                AND (ad.enabled IS NULL OR ad.enabled = true)
                 """;
-        groupDto.setPermissions(jdbcTemplate.queryForList(sqlGetPermissions, String.class, groupId));
+        groupDto.setAuthorities(jdbcTemplate.queryForList(sqlGetAuthorities, String.class, groupId));
         return groupDto;
     }
 
@@ -126,15 +126,15 @@ public class GroupController {
                 description,
                 groupId
         );
-        if (groupVo.getPermissions() == null) {
-            groupVo.setPermissions(new ArrayList<>());
+        if (groupVo.getAuthorities() == null) {
+            groupVo.setAuthorities(new ArrayList<>());
         } else {
-            groupVo.setPermissions(groupVo.getPermissions().stream()
-                    .filter(permission -> Objects.nonNull(permission) && !permission.isBlank())
+            groupVo.setAuthorities(groupVo.getAuthorities().stream()
+                    .filter(authority -> Objects.nonNull(authority) && !authority.isBlank())
                     .distinct().collect(Collectors.toList()));
 
             // 1. 查询现有权限（使用Set提升比对效率）
-            Set<String> existingPermissions = new HashSet<>(
+            Set<String> existingAuthorities = new HashSet<>(
                     jdbcTemplate.queryForList(
                             "SELECT authority FROM group_authorities WHERE group_id = ?",
                             String.class,
@@ -142,15 +142,15 @@ public class GroupController {
                     )
             );
             // 2. 计算变更集（使用集合运算）
-            Set<String> targetSet = new HashSet<>(groupVo.getPermissions());
+            Set<String> targetSet = new HashSet<>(groupVo.getAuthorities());
 
             // 需要删除的权限：存在现有但不在目标中
-            Set<String> toDelete = new HashSet<>(existingPermissions);
+            Set<String> toDelete = new HashSet<>(existingAuthorities);
             toDelete.removeAll(targetSet);
 
             // 需要新增的权限：存在目标但不在现有中
             Set<String> toAdd = new HashSet<>(targetSet);
-            toAdd.removeAll(existingPermissions);
+            toAdd.removeAll(existingAuthorities);
 
             // 3. 执行批量删除（存在待删除项时）
             if (!toDelete.isEmpty()) {
@@ -177,7 +177,7 @@ public class GroupController {
         groupDto.setGroupName(groupName);
         groupDto.setDescription(description);
         groupDto.setId(groupId);
-        groupDto.setPermissions(groupVo.getPermissions());
+        groupDto.setAuthorities(groupVo.getAuthorities());
         return groupDto;
     }
 

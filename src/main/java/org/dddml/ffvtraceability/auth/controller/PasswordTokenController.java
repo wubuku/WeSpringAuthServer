@@ -93,7 +93,7 @@ public class PasswordTokenController {
             throw new BusinessException("User is disabled");
         OffsetDateTime now = OffsetDateTime.now();
         String token = UUID.randomUUID().toString();
-        passwordTokenService.savePermissionToken(username, token, "register", now);
+        passwordTokenService.saveAuthorizationToken(username, token, "register", now);
         userService.sendCreatePasswordEmail(username, token);
     }
 
@@ -191,7 +191,7 @@ public class PasswordTokenController {
                     """);
         }
         String token = UUID.randomUUID().toString();
-        passwordTokenService.savePermissionToken(user.getUsername(), token, "reset", now);
+        passwordTokenService.saveAuthorizationToken(user.getUsername(), token, "reset", now);
         sendResetPasswordEmail(forgotPasswordVo.getUsername(), token);
 
     }

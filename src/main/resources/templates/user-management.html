@@ -273,12 +273,12 @@
             position: relative;
             z-index: 1;
         }
-        .permission-btn {
+        .authority-btn {
             background: #17a2b8;
             color: white;
         }
         
-        .permission-btn:hover {
+        .authority-btn:hover {
             background: #138496;
         }
     </style>
@@ -410,9 +410,9 @@
                                         class="action-btn password-btn">
                                     ${user.password_change_required ? 'Cancel Password Change' : 'Require Password Change'}
                                 </button>
-                                <button onclick="managePermissions('${user.username}')" 
-                                        class="action-btn permission-btn">
-                                    Manage Permissions
+                                <button onclick="manageAuthorities('${user.username}')" 
+                                        class="action-btn authority-btn">
+                                    Manage Authorities
                                 </button>
                             </td>
                         </tr>
@@ -484,8 +484,8 @@
             window.location.href = '/pre-register?from=user-management';
         }
 
-        function managePermissions(username) {
-            window.location.href = `/permission-management?type=user&target=${username}&from=user-management`;
+        function manageAuthorities(username) {
+            window.location.href = `/authority-management?type=user&target=${username}&from=user-management`;
         }
 
         // Load users when page loads

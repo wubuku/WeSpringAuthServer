@@ -74,7 +74,7 @@ public class SecurityConfig {
                                 // .hasAuthority("Roles_Read")
                                 // .requestMatchers(
                                 // "/pre-register/**",
-                                // "/permission-management/**"
+                                // "/authority-management/**"
                                 // )
                                 // .hasAuthority("ROLE_ADMIN")
                                 .requestMatchers("/**").permitAll()

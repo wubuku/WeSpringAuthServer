@@ -150,11 +150,11 @@
             </a>
 
             <!-- 3. 权限管理 -->
-            <a href="/permission-management" class="menu-item admin-only" sec:authorize="hasRole('ADMIN')">
+            <a href="/authority-management" class="menu-item admin-only" sec:authorize="hasRole('ADMIN')">
                 <span class="admin-badge">Admin</span>
                 <i>🔒</i>
-                <h3>Permission Management</h3>
-                <p>Manage user permissions</p>
+                <h3>Authority Management</h3>
+                <p>Manage user authorities</p>
             </a>
 
             <!-- 4. 预注册用户 -->
@@ -166,11 +166,11 @@
             </a>
 
             <!-- 5. 权限设置（倒数第二位） -->
-            <a href="/permission-settings" class="menu-item admin-only" sec:authorize="hasRole('ADMIN')">
+            <a href="/authority-settings" class="menu-item admin-only" sec:authorize="hasRole('ADMIN')">
                 <span class="admin-badge">Admin</span>
                 <i>⚙️</i>
-                <h3>Permission Settings</h3>
-                <p>Configure system permissions</p>
+                <h3>Authority Settings</h3>
+                <p>Configure system authorities</p>
             </a>
 
             <!-- 6. OAuth2测试（最后一位） -->

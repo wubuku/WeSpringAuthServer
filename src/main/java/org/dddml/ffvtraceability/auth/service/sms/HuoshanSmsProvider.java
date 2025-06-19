@@ -38,41 +38,32 @@ public class HuoshanSmsProvider implements SmsProvider {
 
     @Override
     public boolean sendVerificationCode(String phoneNumber, String code) {
-//        try {
         SmsSendRequest request = new SmsSendRequest();
         request.setSmsAccount(config.getSmsAccount());
         request.setSign(config.getSignName());
         request.setTemplateId(config.getTemplateId());
         request.setTemplateParam("{\"code\":\"" + code + "\"}");
         request.setPhoneNumbers(phoneNumber);
+        
         SmsServiceInfoConfig smsServiceInfoConfig = new SmsServiceInfoConfig(config.getAccessKeyId(), config.getSecretKey());
         SmsService smsService = SmsServiceImpl.getInstance(smsServiceInfoConfig);
+        
         try {
             SmsSendResponse smsSendResponse = smsService.send(request);
             if (smsSendResponse.getResponseMetadata().getError() != null) {
                 throw new RuntimeException("Error sending SMS via Huoshan:" + smsSendResponse.getResponseMetadata().getError().getMessage());
             }
             logger.info("Sent SMS via Huoshan to {}, response: {}", phoneNumber, smsSendResponse);
+            return true;
         } catch (Exception e) {
+            logger.error("Error sending SMS via Huoshan", e);
             throw new RuntimeException("Error sending SMS via Huoshan", e);
         }
-        return true;
-//            if (success) {
-//                logger.info("Successfully sent SMS via Huoshan to {}, response: {}", phoneNumber, response.getBody());
-//            } else {
-//                logger.error("Failed to send SMS via Huoshan to {}, response: {}", phoneNumber, response.getBody());
-//            }
-//
-//            return success;
-//        } catch (Exception e) {
-//            logger.error("Error sending SMS via Huoshan", e);
-//            return false;
-//        }
     }
 
     private String generateAuthorization(Map<String, Object> bodyParams, String action, String timestamp) {
         try {
-            // Format: HMAC-SHA256 Credential=AKXXXXXXXXXXXXXXX/20221122/cn-north-4/sms/request, SignedHeaders=content-type;host;x-date;x-service, Signature=xxxxxx
+            // 生成标准的HMAC-SHA256授权头格式
             String canonicalRequest = "POST\n/" +
                     "\n" +
                     "action=" + action + "&" +

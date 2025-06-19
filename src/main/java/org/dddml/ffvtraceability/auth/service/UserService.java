@@ -101,23 +101,17 @@ public class UserService {
         if (user != null) {
             sql = "select * from groups where id in (select group_id from group_members gm where gm.username=?)";
             user.setGroups(jdbcTemplate.query(sql, new GroupDtoMapper(), username));
-//            String sqlGetPermissions = """
-//                        SELECT a.authority
-//                        FROM authorities a
-//                        JOIN permissions p ON a.authority = p.permission_id
-//                        WHERE a.username = ?
-//                        AND (p.enabled IS NULL OR p.enabled = true)
-//                        """; //如果用这个查询语句，那么给admin预设的几个权限就没了。
+            
             // 获取用户关联的所有组的权限集合
-            String sqlPermissions = """
-                        SELECT DISTINCT p.permission_id
-                        FROM permissions p
-                        JOIN group_authorities ga ON p.permission_id = ga.authority
+            String sqlAuthorities = """
+                        SELECT DISTINCT ad.authority_id
+                        FROM authority_definitions ad
+                        JOIN group_authorities ga ON ad.authority_id = ga.authority
                         JOIN group_members gm ON ga.group_id = gm.group_id
                         WHERE gm.username = ?
                     """;
-            List<String> permissions = jdbcTemplate.queryForList(sqlPermissions, String.class, username);
-            user.setPermissions(permissions);
+            List<String> authorities = jdbcTemplate.queryForList(sqlAuthorities, String.class, username);
+            user.setAuthorities(authorities);
         }
         return user;
     }
@@ -179,7 +173,7 @@ public class UserService {
             jdbcTemplate.update("INSERT INTO group_members (username, group_id) SELECT ?, id FROM groups WHERE group_name = 'USER_GROUP'", username);
         }
         String token = UUID.randomUUID().toString();
-        passwordTokenService.savePermissionToken(username, token, "register", now);
+        passwordTokenService.saveAuthorizationToken(username, token, "register", now);
         sendCreatePasswordEmail(username, token);
         logger.info("Pre-registered user: {}", username);
         return new PreRegisterUserResponse(username, oneTimePassword, now);
@@ -253,18 +247,18 @@ public class UserService {
         } catch (Exception exception) {
             throw new UsernameNotFoundException("User not found: " + username);
         }
-        String sqlPermissions = """
-                    SELECT DISTINCT p.permission_id
-                    FROM permissions p
-                    JOIN group_authorities ga ON p.permission_id = ga.authority
+        String sqlAuthorities = """
+                    SELECT DISTINCT ad.authority_id
+                    FROM authority_definitions ad
+                    JOIN group_authorities ga ON ad.authority_id = ga.authority
                     JOIN group_members gm ON ga.group_id = gm.group_id
                     WHERE gm.username = ?
                 """;
-        List<String> permissions;
+        List<String> authorities;
         try {
-            permissions = jdbcTemplate.queryForList(sqlPermissions, String.class, username);
+            authorities = jdbcTemplate.queryForList(sqlAuthorities, String.class, username);
         } catch (Exception exception) {
-            permissions = new ArrayList<>();
+            authorities = new ArrayList<>();
         }
         List<String> groupNames;
         try {
@@ -280,10 +274,10 @@ public class UserService {
             groupNames = new ArrayList<>();
         }
 
-        Set<GrantedAuthority> authorities = new HashSet<>();
+        Set<GrantedAuthority> grantedAuthorities = new HashSet<>();
         Set<String> groups = new HashSet<>(groupNames);
-        for (String permission : permissions) {
-            authorities.add(new SimpleGrantedAuthority(permission));
+        for (String authority : authorities) {
+            grantedAuthorities.add(new SimpleGrantedAuthority(authority));
         }
         OffsetDateTime passwordLastChanged = OffsetDateTimeUtil.toOffsetDateTime(userInfo.get("password_last_changed"));
 
@@ -291,7 +285,7 @@ public class UserService {
                 username,
                 (String) userInfo.get("password"),
                 userInfo.get("enabled") != null && (Boolean) userInfo.get("enabled"),
-                authorities,
+                grantedAuthorities,
                 groups,
                 (Boolean) userInfo.get("password_change_required"),
                 passwordLastChanged,

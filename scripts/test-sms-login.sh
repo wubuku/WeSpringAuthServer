@@ -6,7 +6,8 @@
 set -e
 
 # 配置
-BASE_URL="http://localhost:9000"
+#BASE_URL="http://localhost:9000"
+BASE_URL="https://al.u2511175.nyat.app:50518"
 DB_HOST="localhost"  
 DB_NAME="ruichuangqi_dev"
 DB_USER="postgres"

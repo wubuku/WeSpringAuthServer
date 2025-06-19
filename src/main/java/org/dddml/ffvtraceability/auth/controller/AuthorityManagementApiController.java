@@ -22,9 +22,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/auth-srv/permissions")
-public class PermissionManagementApiController {
-    private static final Logger logger = LoggerFactory.getLogger(PermissionManagementApiController.class);
+@RequestMapping("/auth-srv/authorities")
+public class AuthorityManagementApiController {
+    private static final Logger logger = LoggerFactory.getLogger(AuthorityManagementApiController.class);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -32,7 +32,7 @@ public class PermissionManagementApiController {
     @Qualifier("defaultObjectMapper")
     private ObjectMapper objectMapper;
 
-    public PermissionManagementApiController(JdbcTemplate jdbcTemplate) {
+    public AuthorityManagementApiController(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -47,21 +47,21 @@ public class PermissionManagementApiController {
 
     @GetMapping("/base")
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> getBasePermissions() {
-        logger.debug("Fetching base permissions...");
+    public List<Map<String, Object>> getBaseAuthorities() {
+        logger.debug("Fetching base authorities...");
         String sql = """
-                SELECT authority_id as permission_id, description, enabled 
+                SELECT authority_id, description, enabled 
                 FROM authority_definitions 
                 ORDER BY authority_id
                 """;
-        List<Map<String, Object>> permissions = jdbcTemplate.queryForList(sql);
-        logger.debug("Found {} base permissions: {}", permissions.size(), permissions);
-        return permissions;
+        List<Map<String, Object>> authorities = jdbcTemplate.queryForList(sql);
+        logger.debug("Found {} base authorities: {}", authorities.size(), authorities);
+        return authorities;
     }
 
     @GetMapping("/user/{username}")
     @Transactional(readOnly = true)
-    public List<String> getUserPermissions(@PathVariable String username) {
+    public List<String> getUserAuthorities(@PathVariable String username) {
         String sql = """
                 SELECT a.authority 
                 FROM authorities a
@@ -75,49 +75,49 @@ public class PermissionManagementApiController {
 
     @PostMapping("/update")
     @Transactional
-    public void updatePermission(@RequestBody Map<String, Object> request) {
+    public void updateAuthority(@RequestBody Map<String, Object> request) {
         String username = (String) request.get("username");
-        String permission = (String) request.get("permission");
+        String authority = (String) request.get("authority");
         boolean granted = (boolean) request.get("granted");
 
         if (granted) {
             jdbcTemplate.update(
                     "INSERT INTO authorities (username, authority) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                    username, permission
+                    username, authority
             );
         } else {
             jdbcTemplate.update(
                     "DELETE FROM authorities WHERE username = ? AND authority = ?",
-                    username, permission
+                    username, authority
             );
         }
     }
 
     @PostMapping("/batch-update")
     @Transactional
-    public void batchUpdatePermissions(@RequestBody Map<String, Object> request) {
+    public void batchUpdateAuthorities(@RequestBody Map<String, Object> request) {
         String username = (String) request.get("username");
         @SuppressWarnings("unchecked")
-        List<String> permissions = (List<String>) request.get("permissions");
+        List<String> authorities = (List<String>) request.get("authorities");
         boolean granted = (boolean) request.get("granted");
 
-        logger.debug("Batch updating permissions for user: {}, granted: {}, permissions: {}",
-                username, granted, permissions);
+        logger.debug("Batch updating authorities for user: {}, granted: {}, authorities: {}",
+                username, granted, authorities);
 
         if (granted) {
             // 批量插入权限
-            for (String permission : permissions) {
+            for (String authority : authorities) {
                 jdbcTemplate.update(
                         "INSERT INTO authorities (username, authority) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                        username, permission
+                        username, authority
                 );
             }
         } else {
             // 批量删除权限
             jdbcTemplate.batchUpdate(
                     "DELETE FROM authorities WHERE username = ? AND authority = ?",
-                    permissions.stream()
-                            .map(permission -> new Object[]{username, permission})
+                    authorities.stream()
+                            .map(authority -> new Object[]{username, authority})
                             .collect(Collectors.toList())
             );
         }
@@ -134,7 +134,7 @@ public class PermissionManagementApiController {
 
     @GetMapping("/group/{groupId}")
     @Transactional(readOnly = true)
-    public List<String> getGroupPermissions(@PathVariable Long groupId) {
+    public List<String> getGroupAuthorities(@PathVariable Long groupId) {
         String sql = """
                 SELECT ga.authority 
                 FROM group_authorities ga
@@ -148,47 +148,47 @@ public class PermissionManagementApiController {
 
     @PostMapping("/group/update")
     @Transactional
-    public void updateGroupPermission(@RequestBody Map<String, Object> request) {
+    public void updateGroupAuthority(@RequestBody Map<String, Object> request) {
         Long groupId = Long.valueOf(request.get("groupId").toString());
-        String permission = (String) request.get("permission");
+        String authority = (String) request.get("authority");
         boolean granted = (boolean) request.get("granted");
 
         if (granted) {
             jdbcTemplate.update(
                     "INSERT INTO group_authorities (group_id, authority) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                    groupId, permission
+                    groupId, authority
             );
         } else {
             jdbcTemplate.update(
                     "DELETE FROM group_authorities WHERE group_id = ? AND authority = ?",
-                    groupId, permission
+                    groupId, authority
             );
         }
     }
 
     @PostMapping("/group/batch-update")
     @Transactional
-    public void batchUpdateGroupPermissions(@RequestBody Map<String, Object> request) {
+    public void batchUpdateGroupAuthorities(@RequestBody Map<String, Object> request) {
         Long groupId = Long.valueOf(request.get("groupId").toString());
         @SuppressWarnings("unchecked")
-        List<String> permissions = (List<String>) request.get("permissions");
+        List<String> authorities = (List<String>) request.get("authorities");
         boolean granted = (boolean) request.get("granted");
 
-        logger.debug("Batch updating permissions for group: {}, granted: {}, permissions: {}",
-                groupId, granted, permissions);
+        logger.debug("Batch updating authorities for group: {}, granted: {}, authorities: {}",
+                groupId, granted, authorities);
 
         if (granted) {
-            for (String permission : permissions) {
+            for (String authority : authorities) {
                 jdbcTemplate.update(
                         "INSERT INTO group_authorities (group_id, authority) VALUES (?, ?) ON CONFLICT DO NOTHING",
-                        groupId, permission
+                        groupId, authority
                 );
             }
         } else {
             jdbcTemplate.batchUpdate(
                     "DELETE FROM group_authorities WHERE group_id = ? AND authority = ?",
-                    permissions.stream()
-                            .map(permission -> new Object[]{groupId, permission})
+                    authorities.stream()
+                            .map(authority -> new Object[]{groupId, authority})
                             .collect(Collectors.toList())
             );
         }
@@ -196,23 +196,23 @@ public class PermissionManagementApiController {
 
     @PostMapping("/create")
     @Transactional
-    public void createPermission(@RequestBody Map<String, String> request) {
-        String permissionId = request.get("permissionId");
+    public void createAuthority(@RequestBody Map<String, String> request) {
+        String authorityId = request.get("authorityId");
         String description = request.get("description");
         jdbcTemplate.update(
                 "INSERT INTO authority_definitions (authority_id, description, enabled) VALUES (?, ?, NULL)",
-                permissionId, description
+                authorityId, description
         );
     }
 
-    @PostMapping("/{permissionId}/toggle-enabled")
+    @PostMapping("/{authorityId}/toggle-enabled")
     @Transactional
-    public void togglePermissionEnabled(@PathVariable String permissionId) {
+    public void toggleAuthorityEnabled(@PathVariable String authorityId) {
         // 先检查当前状态
         Boolean currentEnabled = jdbcTemplate.queryForObject(
                 "SELECT enabled FROM authority_definitions WHERE authority_id = ?",
                 Boolean.class,
-                permissionId
+                authorityId
         );
 
         // 如果当前是 null，设置为 false；如果当前是 false，设置为 null
@@ -220,26 +220,26 @@ public class PermissionManagementApiController {
 
         jdbcTemplate.update(
                 "UPDATE authority_definitions SET enabled = ? WHERE authority_id = ?",
-                newEnabled, permissionId
+                newEnabled, authorityId
         );
     }
 
-    @PostMapping("/{permissionId}/update")
+    @PostMapping("/{authorityId}/update")
     @Transactional
-    public void updatePermission(
-            @PathVariable String permissionId,
+    public void updateAuthority(
+            @PathVariable String authorityId,
             @RequestBody Map<String, String> request) {
         String description = request.get("description");
 
         jdbcTemplate.update(
                 "UPDATE authority_definitions SET description = ? WHERE authority_id = ?",
-                description, permissionId
+                description, authorityId
         );
     }
 
     @PostMapping("/import-csv")
     @Transactional
-    public String importPermissionsFromCsv(@RequestParam("file") MultipartFile file) throws IOException {
+    public String importAuthoritiesFromCsv(@RequestParam("file") MultipartFile file) throws IOException {
         if (file.isEmpty()) {
             throw new BusinessException("Please select a file to upload");
         }
@@ -261,8 +261,8 @@ public class PermissionManagementApiController {
         ) {
             // 验证必需的列是否存在
             Set<String> headers = new HashSet<>(csvParser.getHeaderNames());
-            if (!headers.contains("permission_id")) {
-                throw new BusinessException("CSV file must contain 'permission_id' column");
+            if (!headers.contains("authority_id")) {
+                throw new BusinessException("CSV file must contain 'authority_id' column");
             }
 
             List<String> errors = new ArrayList<>();
@@ -272,9 +272,9 @@ public class PermissionManagementApiController {
             for (CSVRecord record : csvParser) {
                 lineNumber++;
                 try {
-                    String permissionId = record.get("permission_id").trim();
-                    if (permissionId.isEmpty()) {
-                        errors.add(String.format("Line %d: permission_id cannot be empty", lineNumber));
+                    String authorityId = record.get("authority_id").trim();
+                    if (authorityId.isEmpty()) {
+                        errors.add(String.format("Line %d: authority_id cannot be empty", lineNumber));
                         continue;
                     }
 
@@ -299,7 +299,7 @@ public class PermissionManagementApiController {
                                     SET description = EXCLUDED.description,
                                         enabled = EXCLUDED.enabled
                                     """,
-                            permissionId, description, enabled
+                            authorityId, description, enabled
                     );
                     successCount++;
 
@@ -310,7 +310,7 @@ public class PermissionManagementApiController {
 
             // 构建响应消息
             StringBuilder message = new StringBuilder()
-                    .append(String.format("Successfully processed %d permissions. ", successCount));
+                    .append(String.format("Successfully processed %d authorities. ", successCount));
             if (!errors.isEmpty()) {
                 message.append(String.format("Found %d errors:\n", errors.size()));
                 errors.forEach(error -> message.append(error).append("\n"));
@@ -358,4 +358,4 @@ public class PermissionManagementApiController {
             return name;
         }
     }
-}
+} 

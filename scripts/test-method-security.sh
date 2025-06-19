@@ -54,7 +54,7 @@ echo "=================================================="
 
 # 测试管理员页面访问
 test_page_access "/group-management" "Access group management page"
-test_page_access "/permission-management" "Access permission management page"
+test_page_access "/authority-management" "Access authority management page"
 test_page_access "/user-management" "Access user management page"
 test_page_access "/pre-register" "Access pre-register page"
 

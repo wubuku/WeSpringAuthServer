@@ -4,11 +4,11 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
 @Controller
-public class PermissionManagementViewController {
+public class AuthoritySettingsViewController {
 
-    @GetMapping("/permission-management")
+    @GetMapping("/authority-settings")
     //@PreAuthorize("hasRole('ADMIN')")
-    public String permissionManagementPage() {
-        return "permission-management";
+    public String authoritySettingsPage() {
+        return "authority-settings";
     }
 } 
