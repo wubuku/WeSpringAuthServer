@@ -82,6 +82,16 @@ public class SecurityConfig {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/oauth2/**", "/sms/**", "/wechat/**"))
+                // 添加安全头配置，提升安全防护
+                .headers(headers -> headers
+                        .frameOptions().deny()  // 防止点击劫持
+                        .contentTypeOptions().and()   // 防止MIME类型混淆攻击
+                        .httpStrictTransportSecurity(hstsConfig -> hstsConfig
+                                .maxAgeInSeconds(31536000)  // HSTS 1年
+                                .includeSubDomains(true)    // 包含子域名
+                        )
+                        .referrerPolicy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)
+                )
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(

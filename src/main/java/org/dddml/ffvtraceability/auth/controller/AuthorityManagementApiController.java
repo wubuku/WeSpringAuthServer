@@ -244,8 +244,19 @@ public class AuthorityManagementApiController {
             throw new BusinessException("Please select a file to upload");
         }
 
-        if (!Objects.requireNonNull(file.getOriginalFilename()).toLowerCase().endsWith(".csv")) {
+        // 文件大小限制：最大1MB
+        if (file.getSize() > 1024 * 1024) {
+            throw new BusinessException("File size must be less than 1MB");
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || !originalFilename.toLowerCase().endsWith(".csv")) {
             throw new BusinessException("Please upload a CSV file");
+        }
+
+        // 验证文件名，防止路径遍历攻击
+        if (originalFilename.contains("..") || originalFilename.contains("/") || originalFilename.contains("\\")) {
+            throw new BusinessException("Invalid filename");
         }
 
         try (BufferedReader reader
@@ -320,8 +331,7 @@ public class AuthorityManagementApiController {
 
         } catch (Exception e) {
             logger.error("Error processing CSV file", e);
-            throw new BusinessException("Error processing CSV file: " + e.getMessage());
-            //return ResponseEntity.badRequest().body("Error processing CSV file: " + e.getMessage());
+            throw new BusinessException("Error processing CSV file. Please check the file format and try again.");
         }
     }
 

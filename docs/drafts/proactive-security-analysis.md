@@ -51,19 +51,28 @@
    - **影响**: DEBUG模式下敏感信息暴露，严重安全风险
    - **修复**: 所有密码日志改为[HIDDEN]，只记录长度等非敏感信息
 
+2. **缺少安全头配置** ✅ **已修复**
+   - **问题**: 没有配置X-Frame-Options、HSTS等安全头
+   - **修复**: 添加frameOptions().deny()、contentTypeOptions()、HSTS等安全头
+
+3. **文件上传安全加强** ✅ **已修复**
+   - **问题**: CSV上传缺少文件大小限制和路径验证
+   - **修复**: 添加1MB文件大小限制、文件名路径遍历防护
+
+4. **异常信息泄露** ✅ **已修复**
+   - **问题**: CSV处理异常暴露详细错误信息
+   - **修复**: 使用通用错误消息，详细信息仅记录到日志
+
 ### ⚠️ 发现的潜在安全问题
 1. **CORS配置过于宽松**
    - **位置**: AuthorizationServerConfig.corsConfigurationSource()
    - **问题**: 允许所有HTTP方法(GET,POST,PUT,DELETE,OPTIONS)
    - **建议**: 仅允许必要的HTTP方法
 
-2. **缺少HTTPS强制配置**
+2. **缺少HTTPS强制配置** ⚠️ **需讨论**
    - **影响**: 生产环境可能通过HTTP传输敏感数据
    - **建议**: 添加requiresChannel().requiresSecure()
-
-3. **缺少安全头配置**
-   - **问题**: 没有配置X-Frame-Options、X-Content-Type-Options等安全头
-   - **建议**: 添加headers().frameOptions().deny()等配置
+   - **注意**: 可能影响开发环境，需要配置条件性启用
 
 ### ✅ 确认安全的实现
 1. **SQL注入防护** ✅
