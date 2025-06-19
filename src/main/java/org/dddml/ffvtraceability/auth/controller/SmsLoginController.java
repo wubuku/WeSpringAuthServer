@@ -1,6 +1,7 @@
 package org.dddml.ffvtraceability.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.exception.AuthenticationException;
 import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
@@ -49,10 +50,12 @@ public class SmsLoginController {
 
     /**
      * Send SMS verification code - 从 SocialLoginController 移动过来
+     * 支持JSON格式请求以兼容Web页面
      */
     @PostMapping("/send-code")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> sendSmsCode(@RequestParam("mobileNumber") String mobileNumber) {
+    public ResponseEntity<Map<String, Object>> sendSmsCode(@RequestBody Map<String, String> request) {
+        String mobileNumber = request.get("phoneNumber");
         Map<String, Object> response = new HashMap<>();
 
         if (mobileNumber == null || mobileNumber.isEmpty()) {
@@ -122,13 +125,17 @@ public class SmsLoginController {
 
     /**
      * SMS验证端点 - 为Web页面登录提供验证服务
-     * 验证成功后重定向到首页，失败返回错误信息
+     * 接收JSON请求，验证成功后创建登录会话
      */
     @PostMapping("/verify")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> verifySmsCode(@RequestParam("phoneNumber") String phoneNumber,
-                                                             @RequestParam("code") String code) {
+    public ResponseEntity<Map<String, Object>> verifySmsCode(@RequestBody Map<String, String> request,
+                                                             HttpServletRequest httpRequest,
+                                                             HttpServletResponse httpResponse) {
         Map<String, Object> response = new HashMap<>();
+        
+        String phoneNumber = request.get("phoneNumber");
+        String code = request.get("code");
 
         if (phoneNumber == null || phoneNumber.isEmpty() || code == null || code.isEmpty()) {
             response.put("success", false);
@@ -139,9 +146,21 @@ public class SmsLoginController {
         try {
             CustomUserDetails userDetails = smsVerificationService.processSmsLogin(phoneNumber, code);
             if (userDetails != null) {
+                // 创建登录会话 - 使用Spring Security的方式
+                org.springframework.security.authentication.UsernamePasswordAuthenticationToken authToken = 
+                    new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities());
+                
+                org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(authToken);
+                
+                // 保存到session
+                httpRequest.getSession().setAttribute(
+                    org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                    org.springframework.security.core.context.SecurityContextHolder.getContext()
+                );
+
                 response.put("success", true);
                 response.put("message", "Verification successful");
-                response.put("redirectUrl", "/");
                 return ResponseEntity.ok(response);
             } else {
                 response.put("success", false);
