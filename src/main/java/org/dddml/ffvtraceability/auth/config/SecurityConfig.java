@@ -79,7 +79,8 @@ public class SecurityConfig {
                                 "/js/**",
                                 "/favicon.ico",   // 避免favicon重定向循环
                                 "/sms/**",        // SMS登录相关端点
-                                "/wechat/**"      // 微信登录相关端点
+                                "/wechat/**",     // 微信登录相关端点
+                                "/.well-known/**" // Chrome DevTools自动工作空间功能
                         ).permitAll()
                         .requestMatchers("/user-management")
                         .hasAuthority("Users_Read")
