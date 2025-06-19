@@ -75,8 +75,8 @@ public class PasswordController {
                 userDetails.getUsername()
         );
 
-        logger.debug("Current stored password: {}", currentStoredPassword);
-        logger.debug("Attempting to match password: {}", currentPassword);
+        logger.debug("Current stored password: [HIDDEN]");
+        logger.debug("Attempting to match password: [HIDDEN]");
 
         // 验证当前密码
         if (!passwordEncoder.matches(currentPassword, currentStoredPassword)) {
@@ -86,7 +86,7 @@ public class PasswordController {
 
         // 加密新密码
         String encodedPassword = passwordEncoder.encode(newPassword);
-        logger.debug("New encoded password: {}", encodedPassword);
+        logger.debug("New encoded password: [HIDDEN]");
 
         // 确保新密码可以被验证
         if (!passwordEncoder.matches(newPassword, encodedPassword)) {

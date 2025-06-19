@@ -22,16 +22,16 @@ public class PasswordEncoderConfig {
             @Override
             public String encode(CharSequence rawPassword) {
                 String encoded = delegatingPasswordEncoder.encode(rawPassword);
-                logger.debug("Password encoding - Raw length: {}, Encoded: {}",
-                        rawPassword.length(), encoded);
+                logger.debug("Password encoding - Raw length: {}, Encoded: [HIDDEN]",
+                        rawPassword.length());
                 return encoded;
             }
 
             @Override
             public boolean matches(CharSequence rawPassword, String encodedPassword) {
                 boolean matches = delegatingPasswordEncoder.matches(rawPassword, encodedPassword);
-                logger.debug("Password matching - Raw length: {}, Encoded: {}, Matches: {}",
-                        rawPassword.length(), encodedPassword, matches);
+                logger.debug("Password matching - Raw length: {}, Encoded: [HIDDEN], Matches: {}",
+                        rawPassword.length(), matches);
                 return matches;
             }
         };
