@@ -22,7 +22,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/auth-srv/authorities")
+@RequestMapping({"/auth-srv/authorities", "/api/authorities"})
 public class AuthorityManagementApiController {
     private static final Logger logger = LoggerFactory.getLogger(AuthorityManagementApiController.class);
 

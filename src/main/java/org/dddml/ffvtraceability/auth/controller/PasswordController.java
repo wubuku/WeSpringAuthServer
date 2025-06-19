@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 @Controller
-@RequestMapping("/auth-srv/password")
+@RequestMapping({"/auth-srv/password", "/password"})
 public class PasswordController {
     private static final Logger logger = LoggerFactory.getLogger(PasswordController.class);
 

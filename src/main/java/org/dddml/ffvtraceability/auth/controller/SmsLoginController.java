@@ -26,7 +26,7 @@ import java.util.Map;
  * 处理短信验证码发送和短信登录功能
  */
 @RestController
-@RequestMapping("/sms")
+@RequestMapping({"/sms", "/api/sms"})
 public class SmsLoginController {
 
     // Constants
@@ -118,6 +118,42 @@ public class SmsLoginController {
                          HttpServletResponse response) throws IOException {
         // 直接调用 smsAuth 方法，保持完全相同的逻辑
         smsAuth(clientId, mobileNumber, verificationCode, response);
+    }
+
+    /**
+     * SMS验证端点 - 为Web页面登录提供验证服务
+     * 验证成功后重定向到首页，失败返回错误信息
+     */
+    @PostMapping("/verify")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> verifySmsCode(@RequestParam("phoneNumber") String phoneNumber,
+                                                             @RequestParam("code") String code) {
+        Map<String, Object> response = new HashMap<>();
+
+        if (phoneNumber == null || phoneNumber.isEmpty() || code == null || code.isEmpty()) {
+            response.put("success", false);
+            response.put("message", "Phone number and verification code are required");
+            return ResponseEntity.badRequest().body(response);
+        }
+
+        try {
+            CustomUserDetails userDetails = smsVerificationService.processSmsLogin(phoneNumber, code);
+            if (userDetails != null) {
+                response.put("success", true);
+                response.put("message", "Verification successful");
+                response.put("redirectUrl", "/");
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("success", false);
+                response.put("message", "Invalid verification code or expired");
+                return ResponseEntity.badRequest().body(response);
+            }
+        } catch (Exception e) {
+            logger.error("SMS verification failed for phone: {}", phoneNumber, e);
+            response.put("success", false);
+            response.put("message", "Verification failed: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 
     // Private helper methods

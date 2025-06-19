@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/auth-srv/users")
+@RequestMapping({"/auth-srv/users", "/api/users"})
 public class UserPreRegistrationController {
 
     private final UserService userService;

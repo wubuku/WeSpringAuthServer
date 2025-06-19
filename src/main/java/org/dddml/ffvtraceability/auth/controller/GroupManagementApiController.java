@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/auth-srv/groups")
+@RequestMapping({"/auth-srv/groups", "/api/groups"})
 public class GroupManagementApiController {
     private static final Logger logger = LoggerFactory.getLogger(GroupManagementApiController.class);
 
