@@ -59,8 +59,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/web-sms/**").permitAll()  // Web SMS验证端点
                         // 新API路径 (/api/**) 权限配置
-                        .requestMatchers("/api/users/**").hasAuthority("Users_Read")
-                        .requestMatchers("/api/groups/**").hasAuthority("Roles_Read")
+                        .requestMatchers("/api/users/**").hasAuthority("ROLE_ADMIN") // "Users_Read")
+                        .requestMatchers("/api/groups/**").hasAuthority("ROLE_ADMIN") // "Roles_Read")
                         .requestMatchers("/api/authorities/**").hasAuthority("ROLE_ADMIN")
                         // 旧API路径 (/auth-srv/**) 权限配置 - 采用保守策略，全部需要ADMIN权限
                         .requestMatchers("/auth-srv/users/**").hasAuthority("ROLE_ADMIN")
@@ -108,6 +108,7 @@ public class SecurityConfig {
                         .hasAuthority("Roles_Read")
                         .requestMatchers(
                                 "/pre-register", "/pre-register/**", "/auth-srv/pre-register",
+                                "/authority-settings",
                                 "/authority-management/**",
                                 "/auth-srv/authority-management/**"
                         ).hasAuthority("ROLE_ADMIN")
