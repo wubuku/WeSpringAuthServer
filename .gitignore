@@ -129,3 +129,7 @@ pids
 .env.production.local
 wechat_tokens.env
 sms_tokens.env
+auth.env
+cookies.txt
+cookies*.txt
+session.env
