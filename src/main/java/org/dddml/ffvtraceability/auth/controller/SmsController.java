@@ -88,7 +88,7 @@ public class SmsController {
     /**
      * SMS登录端点 - 从SocialLoginController移动过来
      */
-    @GetMapping("/login")
+    @GetMapping("/auth")
     public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
                          @RequestParam("mobileNumber") String mobileNumber,
                          @RequestParam("verificationCode") String verificationCode,
