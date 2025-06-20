@@ -356,8 +356,8 @@
     </div>
 
     <script th:inline="javascript">
-        let baseAuthoritys = [];
-        let currentAuthoritys = new Set();
+        let baseAuthorities = [];
+        let currentAuthorities = new Set();
         let currentTarget = null;
         let currentTargetType = 'user';
         let groups = [];
@@ -390,7 +390,7 @@
                 }
 
                 // 2. 加载基础数据
-                await loadBaseAuthoritys();
+                await loadBaseAuthorities();
                 await loadGroups();
 
                 // 3. 处理从用户管理或组管理页面进入的情况
@@ -423,7 +423,7 @@
                     
                     // 加载目标权限
                     currentTarget = target;
-                    await loadTargetAuthoritys();
+                    await loadTargetAuthorities();
                     renderAuthorityTree();
                 } else {
                     // 从首页进入的原有逻辑
@@ -447,10 +447,10 @@
                     // 监听组选择变化
                     document.getElementById('group-select').addEventListener('change', async (e) => {
                         currentTarget = e.target.value;
-                        currentAuthoritys.clear();
+                        currentAuthorities.clear();
                         
                         if (currentTarget) {
-                            await loadTargetAuthoritys();
+                            await loadTargetAuthorities();
                         }
                         
                         renderAuthorityTree();
@@ -493,7 +493,7 @@
         }
 
         // Load base authorities
-        async function loadBaseAuthoritys() {
+        async function loadBaseAuthorities() {
             showLoading();
             try {
                 console.log('Loading base authorities...');
@@ -504,8 +504,8 @@
                 });
                 const authorities = await response.json();
                 console.log('Received base authorities:', authorities);
-                baseAuthoritys = authorities.filter(p => p.enabled !== false);
-                console.log('Filtered active authorities:', baseAuthoritys);
+                baseAuthorities = authorities.filter(p => p.enabled !== false);
+                console.log('Filtered active authorities:', baseAuthorities);
             } catch (error) {
                 console.error('Error loading base authorities:', error);
                 showError('Failed to load authorities: ' + error.message);
@@ -557,12 +557,12 @@
             
             // 清空当前权限
             currentTarget = null;
-            currentAuthoritys.clear();
+            currentAuthorities.clear();
             renderAuthorityTree();
         }
 
         // 加载目标的权限
-        async function loadTargetAuthoritys() {
+        async function loadTargetAuthorities() {
             showLoading();
             try {
                 let response;
@@ -572,7 +572,7 @@
                     response = await fetch(`/api/authorities/group/${currentTarget}`);
                 }
                 const authorities = await response.json();
-                currentAuthoritys = new Set(authorities);
+                currentAuthorities = new Set(authorities);
             } catch (error) {
                 console.error('Error loading authorities:', error);
                 showError('Failed to load authorities: ' + error.message);
@@ -595,7 +595,7 @@
                 return;
             }
 
-            const tree = buildAuthorityTree(baseAuthoritys);
+            const tree = buildAuthorityTree(baseAuthorities);
             const treeHtml = renderTreeNode(tree);
             treeContainer.innerHTML = treeHtml;
             
@@ -645,7 +645,7 @@
                                id="${fullAuthority}" 
                                data-authority="${fullAuthority}"
                                data-is-parent="${!isLeaf}"
-                               ${currentAuthoritys.has(fullAuthority) ? 'checked' : ''}
+                               ${currentAuthorities.has(fullAuthority) ? 'checked' : ''}
                                ${!currentTarget ? 'disabled' : ''}>`;
                 html += `<label for="${fullAuthority}" ${!currentTarget ? 'style="cursor: default;"' : ''}>${key}</label>`;
                 
@@ -674,7 +674,7 @@
                     checkbox.checked = false;
                 }
                 
-                const childAuthoritys = getChildAuthoritys(authority);
+                const childAuthorities = getChildAuthorities(authority);
                 
                 showLoading();
                 try {
@@ -690,11 +690,11 @@
                         },
                         body: JSON.stringify(currentTargetType === 'user' ? {
                             username: currentTarget,
-                            authorities: childAuthoritys,
+                            authorities: childAuthorities,
                             granted: isChecked
                         } : {
                             groupId: currentTarget,
-                            authorities: childAuthoritys,
+                            authorities: childAuthorities,
                             granted: isChecked
                         })
                     });
@@ -704,19 +704,19 @@
                     }
 
                     // 更新复选框状态
-                    childAuthoritys.forEach(perm => {
+                    childAuthorities.forEach(perm => {
                         const childCheckbox = document.querySelector(`input[data-authority="${perm}"]`);
                         if (childCheckbox) {
                             childCheckbox.checked = isChecked;
                         }
                         if (isChecked) {
-                            currentAuthoritys.add(perm);
+                            currentAuthorities.add(perm);
                         } else {
-                            currentAuthoritys.delete(perm);
+                            currentAuthorities.delete(perm);
                         }
                     });
 
-                    showSuccess(`Authoritys ${isChecked ? 'granted' : 'revoked'} successfully`);
+                    showSuccess(`Authorities ${isChecked ? 'granted' : 'revoked'} successfully`);
                 } catch (error) {
                     showError('Failed to update authorities: ' + error.message);
                     checkbox.checked = !isChecked;
@@ -754,9 +754,9 @@
                     }
 
                     if (isChecked) {
-                        currentAuthoritys.add(authority);
+                        currentAuthorities.add(authority);
                     } else {
-                        currentAuthoritys.delete(authority);
+                        currentAuthorities.delete(authority);
                     }
 
                     showSuccess(`Authority ${isChecked ? 'granted' : 'revoked'} successfully`);
@@ -771,31 +771,31 @@
         }
 
         // 添加获取子节点权限的辅助函数
-        function getChildAuthoritys(parentAuthority) {
+        function getChildAuthorities(parentAuthority) {
             const authorities = [];
             const parentParts = parentAuthority.split('_');
             
             // 递归查找所有叶子节点权限
-            function findLeafAuthoritys(node, currentPath) {
+            function findLeafAuthorities(node, currentPath) {
                 for (const [key, value] of Object.entries(node)) {
                     const newPath = [...currentPath, key];
                     if (Object.keys(value).length === 0) {
                         authorities.push(newPath.join('_'));
                     } else {
-                        findLeafAuthoritys(value, newPath);
+                        findLeafAuthorities(value, newPath);
                     }
                 }
             }
             
             // 从父节点开始查找
-            let currentNode = buildAuthorityTree(baseAuthoritys);
+            let currentNode = buildAuthorityTree(baseAuthorities);
             let path = [];
             for (const part of parentParts) {
                 path.push(part);
                 currentNode = findNodeByPath(currentNode, part);
             }
             
-            findLeafAuthoritys(currentNode, path);
+            findLeafAuthorities(currentNode, path);
             return authorities;
         }
 
@@ -846,8 +846,8 @@
 
         // 获取子节点复选框的辅助函数
         function getChildCheckboxes(parentAuthority) {
-            const childAuthoritys = getChildAuthoritys(parentAuthority);
-            return childAuthoritys.map(perm => 
+            const childAuthorities = getChildAuthorities(parentAuthority);
+            return childAuthorities.map(perm => 
                 document.querySelector(`input[data-authority="${perm}"]`)
             ).filter(Boolean);
         }
@@ -954,10 +954,10 @@
             
             // 设置当前目标并加载权限
             currentTarget = username;
-            currentAuthoritys.clear();
+            currentAuthorities.clear();
             
             if (currentTarget) {
-                await loadTargetAuthoritys();
+                await loadTargetAuthorities();
             }
             
             renderAuthorityTree();
