@@ -1,0 +1,57 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: example-resource-server
+  
+  # 主数据源配置（业务数据）
+  datasource:
+    url: jdbc:postgresql://localhost:5432/your_business_db
+    username: your_username
+    password: your_password
+    driver-class-name: org.postgresql.Driver
+  
+  # 安全数据源配置（WeSpringAuthServer的数据库）
+  security:
+    datasource:
+      url: jdbc:postgresql://localhost:5432/wespring_auth_db
+      username: your_username
+      password: your_password
+      driver-class-name: org.postgresql.Driver
+    
+    # OAuth2资源服务器配置
+    oauth2:
+      resourceserver:
+        jwt:
+          # WeSpringAuthServer的JWK Set URI
+          # 资源服务器会从这个端点获取公钥来验证JWT令牌
+          jwk-set-uri: http://localhost:9000/oauth2/jwks
+          # 或者使用issuer-uri让Spring Boot自动发现JWK Set URI
+          # issuer-uri: http://localhost:9000
+
+  # 缓存配置
+  cache:
+    caffeine:
+      spec: maximumSize=100,expireAfterWrite=3600s
+
+# 日志配置
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.cache: DEBUG
+    org.dddml.wespring.resource.example: DEBUG
+    # 显示SQL查询（可选）
+    org.springframework.jdbc.core.JdbcTemplate: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# 管理端点配置（可选）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,caches
+  endpoint:
+    health:
+      show-details: always 

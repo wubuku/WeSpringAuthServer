@@ -12,10 +12,10 @@
             background-color: #f5f5f5;
         }
         .container { 
-            max-width: 1000px; 
+            max-width: 1400px; 
             margin: 0 auto;
             background: white;
-            padding: 30px;
+            padding: 20px;
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
@@ -60,16 +60,34 @@
         .logout-btn:hover {
             background: #c82333;
         }
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
         .user-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            min-width: 1000px; /* 确保表格有最小宽度 */
         }
         .user-table th, 
         .user-table td {
-            padding: 12px;
+            padding: 8px;
             text-align: left;
             border-bottom: 1px solid #ddd;
+            font-size: 13px;
+        }
+        /* 列宽度控制 */
+        .user-table th:nth-child(1), .user-table td:nth-child(1) { width: 100px; } /* Username */
+        .user-table th:nth-child(2), .user-table td:nth-child(2) { width: 80px; }  /* Status */
+        .user-table th:nth-child(3), .user-table td:nth-child(3) { width: 120px; } /* Password Status */
+        .user-table th:nth-child(4), .user-table td:nth-child(4) { width: 100px; } /* Groups */
+        .user-table th:nth-child(5), .user-table td:nth-child(5) { width: 160px; } /* Direct Authorities */
+        .user-table th:nth-child(6), .user-table td:nth-child(6) { width: 200px; } /* User Identifications */
+        .user-table th:nth-child(7), .user-table td:nth-child(7) { width: 240px; } /* Actions */
+        
+        /* Actions列的特殊布局 */
+        .user-table td:nth-child(7) {
+            line-height: 1.2;
         }
         .user-table th {
             background-color: #f8f9fa;
@@ -79,13 +97,14 @@
             background-color: #f5f5f5;
         }
         .action-btn {
-            padding: 6px 12px;
+            padding: 4px 8px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 12px;
             transition: background-color 0.2s;
-            margin-right: 8px;
+            margin-right: 4px;
+            margin-bottom: 2px;
         }
         .enable-btn {
             background: #28a745;
@@ -251,10 +270,10 @@
         }
         .authority-badge {
             display: inline-block;
-            padding: 2px 8px;
-            margin: 2px;
-            border-radius: 12px;
-            font-size: 12px;
+            padding: 2px 6px;
+            margin: 1px;
+            border-radius: 10px;
+            font-size: 11px;
             background: #e9ecef;
             color: #495057;
         }
@@ -281,6 +300,45 @@
         .authority-btn:hover {
             background: #138496;
         }
+        
+        .identification-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            margin: 1px;
+            border-radius: 10px;
+            font-size: 11px;
+        }
+        
+        .identification-badge.verified {
+            background: #d1e7dd;
+            color: #0f5132;
+        }
+        
+        .identification-badge.unverified {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .identification-badge.normal {
+            background: #e9ecef;
+            color: #495057;
+        }
+        
+        .identifications-cell {
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .identifications-cell:hover {
+            overflow: visible;
+            white-space: normal;
+            background: white;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
     </style>
 </head>
 <body>
@@ -303,21 +361,24 @@
             </div>
         </div>
 
-        <table class="user-table">
-            <thead>
-                <tr>
-                    <th>Username</th>
-                    <th>Status</th>
-                    <th>Password Status</th>
-                    <th>Groups</th>
-                    <th>Direct Authorities</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="userTableBody">
-                <!-- Users will be loaded here -->
-            </tbody>
-        </table>
+        <div class="table-container">
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Status</th>
+                        <th>Password Status</th>
+                        <th>Groups</th>
+                        <th>Direct Authorities</th>
+                        <th>User Identifications</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody">
+                    <!-- Users will be loaded here -->
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div class="loading-overlay" id="loading-overlay">
@@ -390,7 +451,7 @@
                             <td>
                                 <div class="password-status">
                                     <span class="password-badge ${user.password_change_required ? 'password-change-required' : 'password-normal'}">
-                                        ${user.password_change_required ? 'Password Change Required' : 'Password Normal'}
+                                        ${user.password_change_required ? 'Change Required' : 'Normal'}
                                     </span>
                                 </div>
                             </td>
@@ -400,6 +461,21 @@
                                     `<span class="authority-badge">${auth}</span>`
                                 ).join('') : '-'}
                             </td>
+                            <td class="identifications-cell">
+                                ${user.identifications ? user.identifications.split(', ').map(identification => {
+                                    let badgeClass = 'identification-badge';
+                                    
+                                    if (identification.endsWith('✓')) {
+                                        badgeClass += ' verified';
+                                    } else if (identification.endsWith('⚠')) {
+                                        badgeClass += ' unverified';
+                                    } else {
+                                        badgeClass += ' normal';
+                                    }
+                                    
+                                    return `<span class="${badgeClass}">${identification}</span>`;
+                                }).join('') : '-'}
+                            </td>
                             <td>
                                 <button onclick="toggleUserEnabled('${user.username}', ${user.enabled})" 
                                         class="action-btn ${user.enabled ? 'disable-btn' : 'enable-btn'}"
@@ -408,11 +484,11 @@
                                 </button>
                                 <button onclick="togglePasswordChange('${user.username}')" 
                                         class="action-btn password-btn">
-                                    ${user.password_change_required ? 'Cancel Password Change' : 'Require Password Change'}
+                                    ${user.password_change_required ? 'Cancel Change' : 'Require Change'}
                                 </button>
                                 <button onclick="manageAuthorities('${user.username}')" 
                                         class="action-btn authority-btn">
-                                    Manage Authorities
+                                    Authorities
                                 </button>
                             </td>
                         </tr>
