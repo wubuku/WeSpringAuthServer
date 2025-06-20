@@ -39,22 +39,17 @@ public class GroupAuthorityService {
     public Set<String> getGroupAuthorities(String groupName) {
         logger.info("Cache MISS - Loading authorities from database for group: {}", groupName);
         
-        // 查询组权限的SQL
-        // 注意：这里假设使用WeSpringAuthServer的数据库表结构
+        // 查询组权限的SQL（基于生产环境的实际实现）
+        // group_authorities表直接存储权限字符串，无需关联authority_definitions表
         String sql = """
-            SELECT ad.authority_name 
-            FROM group_authority_definitions gad
-            JOIN groups g ON gad.group_id = g.id 
-            JOIN authority_definitions ad ON gad.authority_definition_id = ad.id
+            SELECT authority 
+            FROM group_authorities ga 
+            JOIN groups g ON ga.group_id = g.id 
             WHERE g.group_name = ?
             """;
             
-        // 移除GROUP_前缀来匹配数据库中的组名
-        String dbGroupName = groupName.replace("GROUP_", "");
-        
-        Set<String> authorities = new HashSet<>(
-            securityJdbcTemplate.queryForList(sql, String.class, dbGroupName)
-        );
+        Set<String> authorities = new HashSet<>(securityJdbcTemplate.queryForList(sql, String.class,
+            groupName.replace("GROUP_", "")));
         
         logger.debug("Loaded {} authorities from database for group: {}", authorities.size(), groupName);
         return authorities;

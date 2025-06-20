@@ -14,16 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 
-/**
- * 自定义JWT认证转换器
- * 
- * 这个转换器负责从JWT令牌中提取用户的权限信息，包括：
- * 1. 直接权限（authorities）- 用户直接拥有的权限
- * 2. 组权限（groups）- 通过用户所属组间接获得的权限
- * 
- * WeSpringAuthServer在生成JWT令牌时会包含这些信息，
- * 资源服务器需要正确解析这些信息来进行权限控制。
- */
 @Component
 public class CustomJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
     
@@ -40,16 +30,13 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
         logger.debug("Converting JWT to Authentication for subject: {}", jwt.getSubject());
         
         // 1. 添加直接权限
-        // WeSpringAuthServer在JWT的"authorities"声明中包含用户的直接权限
         Set<String> directAuthorities = getClaimAsSet(jwt, "authorities");
         logger.debug("Direct authorities from JWT: {}", directAuthorities);
         directAuthorities.stream()
             .map(SimpleGrantedAuthority::new)
             .forEach(authorities::add);
             
-        // 2. 从组获取权限
-        // WeSpringAuthServer在JWT的"groups"声明中包含用户所属的组
-        // 我们需要查询数据库获取这些组对应的权限
+        // 2. 从组恢复权限
         Set<String> groups = getClaimAsSet(jwt, "groups");
         logger.debug("Groups from JWT: {}", groups);
         
@@ -67,13 +54,6 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
         return new JwtAuthenticationToken(jwt, authorities);
     }
     
-    /**
-     * 从JWT声明中获取字符串集合
-     * 
-     * @param jwt JWT令牌
-     * @param claimName 声明名称
-     * @return 字符串集合，如果声明不存在则返回空集合
-     */
     @SuppressWarnings("unchecked")
     private Set<String> getClaimAsSet(Jwt jwt, String claimName) {
         Object claim = jwt.getClaims().get(claimName);

@@ -122,18 +122,17 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
     public AbstractAuthenticationToken convert(Jwt jwt) {
         Set<GrantedAuthority> authorities = new HashSet<>();
         
+        // 记录转换开始
         logger.debug("Converting JWT to Authentication for subject: {}", jwt.getSubject());
         
         // 1. 添加直接权限
-        // WeSpringAuthServer在JWT的"authorities"声明中包含用户的直接权限
         Set<String> directAuthorities = getClaimAsSet(jwt, "authorities");
         logger.debug("Direct authorities from JWT: {}", directAuthorities);
         directAuthorities.stream()
             .map(SimpleGrantedAuthority::new)
             .forEach(authorities::add);
             
-        // 2. 从组获取权限（如果配置了组权限服务）
-        // WeSpringAuthServer在JWT的"groups"声明中包含用户所属的组
+        // 2. 从组恢复权限
         if (groupAuthorityService != null) {
             Set<String> groups = getClaimAsSet(jwt, "groups");
             logger.debug("Groups from JWT: {}", groups);
@@ -153,9 +152,6 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
         return new JwtAuthenticationToken(jwt, authorities);
     }
     
-    /**
-     * 从JWT声明中获取字符串集合
-     */
     @SuppressWarnings("unchecked")
     private Set<String> getClaimAsSet(Jwt jwt, String claimName) {
         Object claim = jwt.getClaims().get(claimName);
@@ -260,6 +256,7 @@ public class GroupAuthorityService {
     private static final Logger logger = LoggerFactory.getLogger(GroupAuthorityService.class);
     
     @Autowired
+    @Qualifier("securityJdbcTemplate")  // 使用专用的安全数据源
     private JdbcTemplate securityJdbcTemplate;
     
     /**
@@ -270,23 +267,30 @@ public class GroupAuthorityService {
      */
     @Cacheable(value = "groupAuthorities", key = "#groupName")
     public Set<String> getGroupAuthorities(String groupName) {
-        logger.debug("Loading authorities from database for group: {}", groupName);
+        logger.info("Cache MISS - Loading authorities from database for group: {}", groupName);
         
-        // 查询组权限的SQL（基于WeSpringAuthServer的实际表结构）
+        // 查询组权限的SQL（基于生产环境的实际实现）
+        // group_authorities表直接存储权限字符串，无需关联authority_definitions表
         String sql = """
-            SELECT ga.authority 
-            FROM group_authorities ga
+            SELECT authority 
+            FROM group_authorities ga 
             JOIN groups g ON ga.group_id = g.id 
             WHERE g.group_name = ?
             """;
-            
+        // 假设不使用 authority_definitions 表。
+        /*
+        String sql = """
+            SELECT ad.authority_name 
+            FROM group_authority_definitions gad
+            JOIN groups g ON gad.group_id = g.id 
+            JOIN authority_definitions ad ON gad.authority_definition_id = ad.id
+            WHERE g.group_name = ?
+            """;
+        */
         // 移除GROUP_前缀来匹配数据库中的组名
         // WeSpringAuthServer在JWT中使用GROUP_前缀，但数据库中存储的是不带前缀的组名
-        String dbGroupName = groupName.replace("GROUP_", "");
-        
-        Set<String> authorities = new HashSet<>(
-            securityJdbcTemplate.queryForList(sql, String.class, dbGroupName)
-        );
+        Set<String> authorities = new HashSet<>(securityJdbcTemplate.queryForList(sql, String.class,
+            groupName.replace("GROUP_", "")));
         
         logger.debug("Loaded {} authorities from database for group: {}", authorities.size(), groupName);
         return authorities;
