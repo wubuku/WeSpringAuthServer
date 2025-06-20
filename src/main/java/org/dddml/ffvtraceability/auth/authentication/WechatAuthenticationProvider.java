@@ -7,15 +7,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationProvider;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Authentication provider for SMS login
@@ -45,23 +40,14 @@ public class WechatAuthenticationProvider implements AuthenticationProvider {
     }
 
     /**
-     * Create an authenticated token for the phone number
-     * This is used after verification of SMS code
+     * Create an authenticated token for WeChat user
+     * This is used after verification of WeChat authorization code
      *
      * @return An authenticated token
      */
     public Authentication createAuthenticatedToken(Object principal,
                                                    Authentication authentication, UserDetails user) {
-        UsernamePasswordAuthenticationToken result = new UsernamePasswordAuthenticationToken(
-                principal,
-                null, // No credentials needed since already verified
-                Collections.emptyList()
-        );
-        if (user instanceof CustomUserDetails customUser) {
-            Map<String, Object> details = new HashMap<>();
-            details.put("groups", customUser.getGroups());
-            result.setDetails(details);
-        }
-        return result;
+        // 使用工具类创建已认证的token
+        return AuthenticationUtils.createAuthenticatedToken(principal, user);
     }
 } 
