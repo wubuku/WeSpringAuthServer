@@ -21,6 +21,30 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# JWT解码函数
+# 对于 macOS，使用 gbase64
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    decode_jwt() {
+        local jwt_part=$1
+        local pad=$(( 4 - ${#jwt_part} % 4 ))
+        if [ $pad -ne 4 ]; then
+            jwt_part="${jwt_part}$(printf '=%.0s' $(seq 1 $pad))"
+        fi
+        jwt_part=$(echo "$jwt_part" | tr '_-' '/+')
+        echo "$jwt_part" | gbase64 -d 2>/dev/null
+    }
+else
+    decode_jwt() {
+        local jwt_part=$1
+        local pad=$(( 4 - ${#jwt_part} % 4 ))
+        if [ $pad -ne 4 ]; then
+            jwt_part="${jwt_part}$(printf '=%.0s' $(seq 1 $pad))"
+        fi
+        jwt_part=$(echo "$jwt_part" | tr '_-' '/+')
+        echo "$jwt_part" | base64 -d 2>/dev/null
+    }
+fi
+
 # 日志函数
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -205,6 +229,53 @@ EOF
             echo -e "${CYAN}令牌类型:${NC} $TOKEN_TYPE"
             echo -e "${CYAN}过期时间:${NC} $EXPIRES_IN 秒"
             echo -e "${GREEN}========================================${NC}"
+            
+            # 解码并显示JWT内容
+            echo -e "\n${BLUE}📝 解析访问令牌 (Access Token) 内容:${NC}"
+            if [ -n "$ACCESS_TOKEN" ]; then
+                # 分割JWT的三个部分
+                IFS='.' read -r header payload signature <<< "$ACCESS_TOKEN"
+                
+                # 解码Header
+                echo -e "\n${YELLOW}🔍 JWT Header:${NC}"
+                header_decoded=$(decode_jwt "$header")
+                if [ $? -eq 0 ] && [ -n "$header_decoded" ]; then
+                    echo "$header_decoded" | jq '.' 2>/dev/null || echo "$header_decoded"
+                else
+                    echo "❌ 无法解码JWT Header"
+                fi
+                
+                # 解码Payload (Claims)
+                echo -e "\n${YELLOW}🔍 JWT Payload (Claims):${NC}"
+                payload_decoded=$(decode_jwt "$payload")
+                if [ $? -eq 0 ] && [ -n "$payload_decoded" ]; then
+                    echo "$payload_decoded" | jq '.' 2>/dev/null || echo "$payload_decoded"
+                    
+                    # 特别检查和显示groups信息
+                    groups=$(echo "$payload_decoded" | jq -r '.groups // empty' 2>/dev/null)
+                    if [ -n "$groups" ] && [ "$groups" != "null" ]; then
+                        echo -e "\n${GREEN}✅ Groups信息已包含在JWT中:${NC}"
+                        echo "$groups" | jq '.' 2>/dev/null || echo "$groups"
+                    else
+                        echo -e "\n${RED}❌ JWT中缺少groups信息${NC}"
+                    fi
+                    
+                    # 显示authorities信息
+                    authorities=$(echo "$payload_decoded" | jq -r '.authorities // empty' 2>/dev/null)
+                    if [ -n "$authorities" ] && [ "$authorities" != "null" ]; then
+                        echo -e "\n${GREEN}✅ Authorities信息:${NC}"
+                        echo "$authorities" | jq '.' 2>/dev/null || echo "$authorities"
+                    else
+                        echo -e "\n${YELLOW}⚠️  JWT中没有authorities信息（这可能是正常的）${NC}"
+                    fi
+                else
+                    echo "❌ 无法解码JWT Payload"
+                fi
+                
+                echo -e "\n${YELLOW}🔍 JWT Signature:${NC} ${signature:0:20}..."
+            else
+                echo "❌ 没有访问令牌可供解析"
+            fi
             
             return 0
         else
