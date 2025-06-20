@@ -31,7 +31,50 @@ public class UserManagementApiController {
 
     @GetMapping("/list")
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> getUsers() {
+    public Map<String, Object> getUsers(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
+        
+        // 验证分页参数
+        if (page < 1) page = 1;
+        if (size < 1) size = 10;
+        if (size > 100) size = 100; // 限制最大页大小
+        
+        // 计算偏移量
+        int offset = (page - 1) * size;
+        
+        // 构建搜索条件
+        String searchCondition = "";
+        java.util.List<Object> searchParams = new java.util.ArrayList<>();
+        if (search != null && !search.trim().isEmpty()) {
+            searchCondition = """
+                AND (u.username ILIKE ? OR EXISTS (
+                    SELECT 1 FROM user_identifications ui 
+                    WHERE ui.username = u.username 
+                    AND ui.identifier ILIKE ?
+                ))
+                """;
+            String searchPattern = "%" + search.trim() + "%";
+            searchParams.add(searchPattern);
+            searchParams.add(searchPattern);
+        }
+        
+        // 先查询总数
+        String countSql = """
+                SELECT COUNT(DISTINCT u.username)
+                FROM users u
+                WHERE u.username != '*'
+                """ + searchCondition;
+        
+        int totalCount;
+        if (searchParams.isEmpty()) {
+            totalCount = jdbcTemplate.queryForObject(countSql, Integer.class);
+        } else {
+            totalCount = jdbcTemplate.queryForObject(countSql, Integer.class, searchParams.toArray());
+        }
+        
+        // 查询分页数据
         String sql = """
                 SELECT u.username, u.enabled, u.password_change_required,
                        STRING_AGG(DISTINCT g.group_name, ', ') as groups,
@@ -46,11 +89,17 @@ public class UserManagementApiController {
                 LEFT JOIN authorities a ON u.username = a.username
                 LEFT JOIN user_identifications ui ON u.username = ui.username
                 WHERE u.username != '*'
+                """ + searchCondition + """
                 GROUP BY u.username, u.enabled, u.password_change_required
                 ORDER BY u.username
+                LIMIT ? OFFSET ?
                 """;
 
-        List<Map<String, Object>> users = jdbcTemplate.queryForList(sql);
+        List<Map<String, Object>> users;
+        java.util.List<Object> allParams = new java.util.ArrayList<>(searchParams);
+        allParams.add(size);
+        allParams.add(offset);
+        users = jdbcTemplate.queryForList(sql, allParams.toArray());
         
         // 处理标识数据
         users.forEach(user -> {
@@ -60,7 +109,20 @@ public class UserManagementApiController {
             }
         });
         
-        return users;
+        // 计算总页数
+        int totalPages = (int) Math.ceil((double) totalCount / size);
+        
+        // 返回分页结果
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("users", users);
+        result.put("currentPage", page);
+        result.put("pageSize", size);
+        result.put("totalCount", totalCount);
+        result.put("totalPages", totalPages);
+        result.put("hasNext", page < totalPages);
+        result.put("hasPrevious", page > 1);
+        
+        return result;
     }
 
 

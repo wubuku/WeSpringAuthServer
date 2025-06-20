@@ -81,11 +81,197 @@ public class GroupManagementApiController {
 
     @GetMapping("/available-users")
     @Transactional(readOnly = true)
-    public List<String> getAvailableUsers() {
-        return jdbcTemplate.queryForList(
-                "SELECT username FROM users WHERE username != '*' ORDER BY username",
-                String.class
-        );
+    public List<Map<String, Object>> getAvailableUsers(
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "20") int limit) {
+        // 构建搜索条件
+        String searchCondition = "";
+        java.util.List<Object> searchParams = new java.util.ArrayList<>();
+        if (search != null && !search.trim().isEmpty()) {
+            searchCondition = """
+                AND (u.username ILIKE ? OR EXISTS (
+                    SELECT 1 FROM user_identifications ui2 
+                    WHERE ui2.username = u.username 
+                    AND ui2.identifier ILIKE ?
+                ))
+                """;
+            String searchPattern = "%" + search.trim() + "%";
+            searchParams.add(searchPattern);
+            searchParams.add(searchPattern);
+        }
+        
+        // 限制最大返回数量
+        if (limit > 100) limit = 100;
+        if (limit < 1) limit = 20;
+        
+        String sql = """
+                SELECT u.username,
+                       STRING_AGG(DISTINCT 
+                           CASE WHEN ui.user_identification_type_id IS NOT NULL THEN
+                               ui.user_identification_type_id || ':' || ui.identifier || '|' || COALESCE(ui.verified::text, 'null')
+                           END, ', ') as identifications
+                FROM users u
+                LEFT JOIN user_identifications ui ON u.username = ui.username
+                WHERE u.username != '*'
+                """ + searchCondition + """
+                GROUP BY u.username
+                ORDER BY u.username
+                LIMIT ?
+                """;
+        
+        List<Map<String, Object>> users;
+        searchParams.add(limit);
+        users = jdbcTemplate.queryForList(sql, searchParams.toArray());
+        
+        // 处理标识数据，借鉴用户管理页面的格式化逻辑
+        users.forEach(user -> {
+            String rawIdentifications = (String) user.get("identifications");
+            if (rawIdentifications != null) {
+                user.put("identifications", formatIdentifications(rawIdentifications));
+                user.put("displayName", formatUserDisplayName((String) user.get("username"), rawIdentifications));
+            } else {
+                user.put("displayName", user.get("username"));
+            }
+        });
+        
+        return users;
+    }
+    
+    private String formatIdentifications(String rawIdentifications) {
+        if (rawIdentifications == null || rawIdentifications.trim().isEmpty()) {
+            return null;
+        }
+        
+        return java.util.Arrays.stream(rawIdentifications.split(", "))
+                .map(this::formatSingleIdentification)
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    private String formatSingleIdentification(String identification) {
+        String[] parts = identification.split("\\|");
+        if (parts.length != 2) {
+            return identification; // fallback
+        }
+        
+        String typeAndValue = parts[0];
+        String verifiedStatus = parts[1];
+        
+        // 脱敏处理
+        String maskedIdentification = maskSensitiveIdentification(typeAndValue);
+        
+        // 验证状态处理：只有明确为false才显示警告，null不显示符号
+        if ("true".equals(verifiedStatus)) {
+            return maskedIdentification + "✓";
+        } else if ("false".equals(verifiedStatus)) {
+            return maskedIdentification + "⚠";
+        } else {
+            // verified为null的情况，不显示符号
+            return maskedIdentification;
+        }
+    }
+
+    private String maskSensitiveIdentification(String typeAndValue) {
+        String[] parts = typeAndValue.split(":", 2);
+        if (parts.length != 2) {
+            return typeAndValue;
+        }
+        
+        String type = parts[0];
+        String value = parts[1];
+        String maskedValue = maskSensitiveValue(type, value);
+        
+        return type + ":" + maskedValue;
+    }
+
+    private String maskSensitiveValue(String identificationType, String identifier) {
+        // 统一转换为大写进行匹配，因为系统中的标识类型都是大写
+        String upperType = identificationType.toUpperCase();
+        
+        switch (upperType) {
+            // 手机号相关（需要脱敏）
+            case "MOBILE":
+            case "PHONE":
+            case "MOBILE_NUMBER":
+            case "WECHAT_MOBILE_NUMBER":
+                // 手机号脱敏：139****8888
+                if (identifier.length() >= 7) {
+                    return identifier.substring(0, 3) + "****" + identifier.substring(identifier.length() - 4);
+                }
+                break;
+                
+            // 身份证号（需要脱敏）
+            case "ID_CARD":
+            case "IDENTITY_CARD":
+                // 身份证脱敏：110***********1234
+                if (identifier.length() >= 8) {
+                    return identifier.substring(0, 3) + "***********" + identifier.substring(identifier.length() - 4);
+                }
+                break;
+                
+            // 邮箱（需要脱敏）
+            case "EMAIL":
+                // 邮箱脱敏：abc***@example.com
+                int atIndex = identifier.indexOf('@');
+                if (atIndex > 3) {
+                    return identifier.substring(0, 3) + "***" + identifier.substring(atIndex);
+                }
+                break;
+                
+            // 微信相关（不脱敏，管理员需要看到完整信息以便调试）
+            case "WECHAT_OPENID":
+            case "WECHAT_UNIONID":
+                return identifier;
+                
+            default:
+                // 其他未知类型保持原样显示
+                return identifier;
+        }
+        return identifier;
+    }
+    
+    private String formatUserDisplayName(String username, String rawIdentifications) {
+        if (rawIdentifications == null || rawIdentifications.trim().isEmpty()) {
+            return username;
+        }
+        
+        // 按优先级选择最佳的可读标识
+        String[] identifications = rawIdentifications.split(", ");
+        String bestReadableId = getBestReadableIdentification(identifications);
+        
+        if (bestReadableId != null) {
+            return username + " (" + bestReadableId + ")";
+        }
+        
+        return username;
+    }
+    
+    private String getBestReadableIdentification(String[] identifications) {
+        String phoneNumber = null;
+        String email = null;
+        
+        for (String identification : identifications) {
+            String[] parts = identification.split("\\|");
+            if (parts.length != 2) continue;
+            
+            String typeAndValue = parts[0];
+            String[] typeValueParts = typeAndValue.split(":", 2);
+            if (typeValueParts.length != 2) continue;
+            
+            String type = typeValueParts[0].toUpperCase();
+            String value = typeValueParts[1];
+            
+            // 优先选择手机号
+            if (("MOBILE_NUMBER".equals(type) || "WECHAT_MOBILE_NUMBER".equals(type)) && phoneNumber == null) {
+                phoneNumber = maskSensitiveValue(type, value);
+            }
+            // 其次选择邮箱
+            else if ("EMAIL".equals(type) && email == null) {
+                email = maskSensitiveValue(type, value);
+            }
+        }
+        
+        // 返回优先级最高的可读标识
+        return phoneNumber != null ? phoneNumber : email;
     }
 
     @PostMapping("/create")

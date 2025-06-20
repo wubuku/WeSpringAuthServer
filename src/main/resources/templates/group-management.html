@@ -198,6 +198,11 @@
             z-index: 1000;
             pointer-events: none;
         }
+        
+        /* 图标样式 - 取消斜体 */
+        i {
+            font-style: normal;
+        }
         .error, .success {
             padding: 10px 20px;
             margin: 10px 0;
@@ -364,7 +369,11 @@
             <span class="close-btn" onclick="hideManageMembersModal()">&times;</span>
             <h2>Manage Group Members</h2>
             <div class="form-group">
-                <label for="addMember">Add Member:</label>
+                <label for="userSearch">Search Users:</label>
+                <input type="text" id="userSearch" placeholder="Type to search users..." 
+                       onkeyup="handleUserSearchKeyup(event)" 
+                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px;">
+                <label for="addMember">Select User to Add:</label>
                 <select id="addMember">
                     <option value="">Select user to add...</option>
                 </select>
@@ -569,9 +578,13 @@
             }
         }
 
-        async function loadAvailableUsers() {
+        async function loadAvailableUsers(search = '') {
             try {
-                const response = await fetch('/api/groups/available-users', {
+                let url = '/api/groups/available-users';
+                if (search && search.trim()) {
+                    url += `?search=${encodeURIComponent(search.trim())}`;
+                }
+                const response = await fetch(url, {
                     headers: {
                         [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
                     }
@@ -585,12 +598,13 @@
                 });
                 const currentMembers = await memberResponse.json();
                 
-                const availableUsers = allUsers.filter(user => !currentMembers.includes(user));
+                // 过滤掉已经是成员的用户
+                const availableUsers = allUsers.filter(user => !currentMembers.includes(user.username));
                 
                 const select = document.getElementById('addMember');
                 select.innerHTML = '<option value="">Select user to add...</option>' +
-                    availableUsers.map(username => 
-                        `<option value="${username}">${username}</option>`
+                    availableUsers.map(user => 
+                        `<option value="${user.username}">${user.displayName}</option>`
                     ).join('');
             } catch (error) {
                 console.error('Error loading available users:', error);
@@ -687,6 +701,17 @@
 
         function manageAuthorities(groupId, groupName) {
             window.location.href = `/authority-management?type=group&target=${groupId}&from=group-management`;
+        }
+        
+        // 用户搜索函数
+        function handleUserSearchKeyup(event) {
+            const searchTerm = event.target.value.trim();
+            
+            // 延迟搜索，避免频繁请求
+            clearTimeout(window.userSearchTimeout);
+            window.userSearchTimeout = setTimeout(() => {
+                loadAvailableUsers(searchTerm);
+            }, 300);
         }
 
         // Load groups when page loads

@@ -339,6 +339,66 @@
             z-index: 1;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
+        
+        /* 分页样式 */
+        .pagination-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding: 10px 0;
+            border-top: 1px solid #eee;
+        }
+        .pagination-info {
+            color: #666;
+            font-size: 14px;
+        }
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .pagination button {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            min-width: 38px;
+        }
+        .pagination button:hover:not(:disabled) {
+            background: #f8f9fa;
+            border-color: #007bff;
+        }
+        .pagination button:disabled {
+            background: #f8f9fa;
+            color: #6c757d;
+            cursor: not-allowed;
+        }
+        .pagination .page-current {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .page-size-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+        .page-size-selector select {
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        /* 图标样式 - 取消斜体 */
+        i {
+            font-style: normal;
+        }
     </style>
 </head>
 <body>
@@ -351,6 +411,12 @@
                 <h1>User Management</h1>
             </div>
             <div class="actions">
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="Search users..." 
+                           onkeyup="handleSearchKeyup(event)" style="padding: 8px; border-radius: 4px; border: 1px solid #ddd; width: 200px;">
+                    <button onclick="searchUsers()" class="btn" style="background: #6c757d; color: white; margin-left: 5px;">Search</button>
+                    <button onclick="clearSearch()" class="btn" style="background: #dc3545; color: white; margin-left: 5px;">Clear</button>
+                </div>
                 <button onclick="showAddUserModal()" class="btn add-user-btn">
                     <i>👤</i> Add New User
                 </button>
@@ -378,6 +444,30 @@
                     <!-- Users will be loaded here -->
                 </tbody>
             </table>
+            
+            <!-- 分页控件 -->
+            <div class="pagination-container">
+                <div class="pagination-info">
+                    <span id="pagination-info">Loading...</span>
+                </div>
+                <div class="pagination">
+                    <button id="first-page" onclick="goToPage(1)">First</button>
+                    <button id="prev-page" onclick="goToPreviousPage()">‹</button>
+                    <span id="page-numbers"></span>
+                    <button id="next-page" onclick="goToNextPage()">›</button>
+                    <button id="last-page" onclick="goToLastPage()">Last</button>
+                </div>
+                <div class="page-size-selector">
+                    <label for="page-size">Show:</label>
+                    <select id="page-size" onchange="changePageSize()">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    <span>per page</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -396,6 +486,12 @@
     <script th:inline="javascript">
         // 从 Model 中获取当前用户名
         const currentUsername = [[${currentUsername}]];
+        
+        // 分页状态
+        let currentPage = 1;
+        let pageSize = 10;
+        let totalPages = 1;
+        let currentSearch = '';
 
         function showLoading() {
             document.getElementById('loading-overlay').style.display = 'flex';
@@ -427,15 +523,20 @@
             }, 3000);
         }
 
-        async function loadUsers() {
+        async function loadUsers(page = currentPage, size = pageSize, search = currentSearch) {
             showLoading();
             try {
-                const response = await fetch('/api/users/list', {
+                let url = `/api/users/list?page=${page}&size=${size}`;
+                if (search && search.trim()) {
+                    url += `&search=${encodeURIComponent(search.trim())}`;
+                }
+                const response = await fetch(url, {
                     headers: {
                         [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
                     }
                 });
-                const users = await response.json();
+                const data = await response.json();
+                const users = data.users;
                 
                 const tbody = document.getElementById('userTableBody');
                 tbody.innerHTML = users.map(user => {
@@ -494,11 +595,123 @@
                         </tr>
                     `;
                 }).join('');
+                
+                // 更新分页状态
+                currentPage = data.currentPage;
+                pageSize = data.pageSize;
+                totalPages = data.totalPages;
+                currentSearch = search;
+                
+                // 更新分页控件
+                updatePaginationControls(data);
+                
             } catch (error) {
                 console.error('Error loading users:', error);
                 showError('Failed to load users');
             } finally {
                 hideLoading();
+            }
+        }
+        
+        function updatePaginationControls(data) {
+            // 更新分页信息
+            const info = document.getElementById('pagination-info');
+            const start = (data.currentPage - 1) * data.pageSize + 1;
+            const end = Math.min(data.currentPage * data.pageSize, data.totalCount);
+            info.textContent = `Showing ${start}-${end} of ${data.totalCount} users`;
+            
+            // 更新按钮状态
+            document.getElementById('first-page').disabled = !data.hasPrevious;
+            document.getElementById('prev-page').disabled = !data.hasPrevious;
+            document.getElementById('next-page').disabled = !data.hasNext;
+            document.getElementById('last-page').disabled = !data.hasNext;
+            
+            // 更新页码按钮
+            updatePageNumbers(data.currentPage, data.totalPages);
+            
+            // 更新页大小选择器
+            document.getElementById('page-size').value = data.pageSize;
+        }
+        
+        function updatePageNumbers(current, total) {
+            const container = document.getElementById('page-numbers');
+            container.innerHTML = '';
+            
+            if (total <= 1) return;
+            
+            // 计算显示的页码范围
+            let start = Math.max(1, current - 2);
+            let end = Math.min(total, current + 2);
+            
+            // 如果范围小于5页，调整显示更多页
+            if (end - start < 4) {
+                if (start === 1) {
+                    end = Math.min(total, start + 4);
+                } else if (end === total) {
+                    start = Math.max(1, end - 4);
+                }
+            }
+            
+            for (let i = start; i <= end; i++) {
+                const btn = document.createElement('button');
+                btn.textContent = i;
+                btn.onclick = () => goToPage(i);
+                if (i === current) {
+                    btn.className = 'page-current';
+                }
+                container.appendChild(btn);
+            }
+        }
+        
+        // 分页导航函数
+        function goToPage(page) {
+            if (page >= 1 && page <= totalPages && page !== currentPage) {
+                loadUsers(page, pageSize, currentSearch);
+            }
+        }
+        
+        function goToPreviousPage() {
+            if (currentPage > 1) {
+                loadUsers(currentPage - 1, pageSize, currentSearch);
+            }
+        }
+        
+        function goToNextPage() {
+            if (currentPage < totalPages) {
+                loadUsers(currentPage + 1, pageSize, currentSearch);
+            }
+        }
+        
+        function goToLastPage() {
+            if (currentPage !== totalPages) {
+                loadUsers(totalPages, pageSize, currentSearch);
+            }
+        }
+        
+        function changePageSize() {
+            const newSize = parseInt(document.getElementById('page-size').value);
+            if (newSize !== pageSize) {
+                pageSize = newSize;
+                loadUsers(1, pageSize, currentSearch); // 重置到第一页
+            }
+        }
+        
+        // 搜索相关函数
+        function searchUsers() {
+            const searchInput = document.getElementById('search-input');
+            const searchTerm = searchInput.value.trim();
+            loadUsers(1, pageSize, searchTerm); // 重置到第一页
+        }
+        
+        function clearSearch() {
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = '';
+            loadUsers(1, pageSize, ''); // 重置到第一页，清空搜索
+        }
+        
+        function handleSearchKeyup(event) {
+            if (event.key === 'Enter') {
+                searchUsers();
             }
         }
 
@@ -517,7 +730,7 @@
                 }
 
                 showSuccess(`Password change status updated for user ${username}`);
-                await loadUsers();
+                await loadUsers(currentPage, pageSize, currentSearch);
             } catch (error) {
                 console.error('Error updating password change status:', error);
                 showError(error.message);
@@ -547,7 +760,7 @@
                 }
 
                 showSuccess(`User ${username} ${currentEnabled ? 'disabled' : 'enabled'} successfully`);
-                await loadUsers();
+                await loadUsers(currentPage, pageSize, currentSearch);
             } catch (error) {
                 console.error('Error updating user:', error);
                 showError(error.message);
@@ -565,7 +778,9 @@
         }
 
         // Load users when page loads
-        document.addEventListener('DOMContentLoaded', loadUsers);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUsers(1, 10, ''); // 明确传递初始分页参数
+        });
     </script>
 </body>
 </html> 
