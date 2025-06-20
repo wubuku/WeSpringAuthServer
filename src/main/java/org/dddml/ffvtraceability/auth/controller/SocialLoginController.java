@@ -195,7 +195,9 @@ public class SocialLoginController {
     }
 
     private Authentication createAuthentication(CustomUserDetails userDetails) {
-        return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+        // 修复说明：使用AuthenticationUtils确保groups信息正确设置到Authentication details中
+        return org.dddml.ffvtraceability.auth.authentication.AuthenticationUtils
+                .createAuthenticatedToken(userDetails, userDetails);
     }
 
     private RegisteredClient getRegisteredClient(String clientId) {

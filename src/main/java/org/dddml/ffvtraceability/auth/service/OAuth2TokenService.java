@@ -54,9 +54,17 @@ public class OAuth2TokenService {
 
     /**
      * 创建认证对象
+     * 修复说明：使用AuthenticationUtils确保groups信息正确设置到Authentication details中
      */
     public Authentication createAuthentication(CustomUserDetails userDetails) {
-        return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities());
+        
+        // 使用AuthenticationUtils设置用户详细信息，包括groups
+        org.dddml.ffvtraceability.auth.authentication.AuthenticationUtils
+                .setUserDetailsToAuthentication(authentication, userDetails);
+        
+        return authentication;
     }
 
     /**
