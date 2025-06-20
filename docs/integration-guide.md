@@ -122,8 +122,11 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
         // 从 JWT 提取组信息并转换为权限（可选）
         Collection<String> groups = jwt.getClaimAsStringList("groups");
         if (groups != null) {
-            // 这里可以查询数据库获取组对应的权限
-            // authorities.addAll(getGroupAuthorities(groups));
+            // 根据业务需求获取组对应的权限，可以通过以下方式：
+            // - 查询数据库：authorities.addAll(getGroupAuthorities(groups));
+            // - 调用外部服务：authorities.addAll(externalService.getGroupAuthorities(groups));
+            // - 从缓存获取：authorities.addAll(cacheService.getGroupAuthorities(groups));
+            // - 使用配置文件映射：authorities.addAll(configService.getGroupAuthorities(groups));
         }
         
         Collection<GrantedAuthority> grantedAuthorities = authorities.stream()
@@ -199,9 +202,9 @@ public class YourBusinessController {
 
 ### 启用组权限支持
 
-如果您的用户通过用户组获得权限，需要：
+如果您的用户通过用户组获得权限，以下是一个**使用数据库查询的示例实现**。您可以根据自己的业务架构选择其他实现方式（如 REST API 调用、配置文件映射、外部权限服务等）：
 
-1. **配置权限数据源**：
+1. **配置权限数据源**（数据库方式示例）：
 ```java
 @Configuration
 public class DataSourceConfig {
@@ -219,7 +222,7 @@ public class DataSourceConfig {
 }
 ```
 
-2. **创建组权限服务**：
+2. **创建组权限服务**（数据库查询示例）：
 ```java
 @Service
 @Cacheable("groupAuthorities")
@@ -230,6 +233,7 @@ public class GroupAuthorityService {
     
     @Cacheable(value = "groupAuthorities", key = "#groupName")
     public Set<String> getGroupAuthorities(String groupName) {
+        // 示例：从数据库查询组权限
         String sql = """
             SELECT DISTINCT ad.authority_definition_id 
             FROM authority_assignments aa
@@ -242,21 +246,31 @@ public class GroupAuthorityService {
 }
 ```
 
-3. **更新权限转换器**：
+> 💡 **其他实现方式**: 您也可以通过以下方式实现组权限获取：
+> - **REST API 调用**: 调用外部权限管理服务
+> - **配置文件映射**: 在 application.yml 中配置组与权限的映射关系
+> - **LDAP/AD 查询**: 从企业目录服务获取组权限
+> - **缓存服务**: 从 Redis 等缓存中获取预计算的组权限
+> - **消息队列**: 通过 MQ 异步获取权限信息
+
+3. **更新权限转换器**（示例实现）：
 ```java
 public class CustomJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
     
+    // 注入您选择的组权限服务实现
     @Autowired
-    private GroupAuthorityService groupAuthorityService;
+    private GroupAuthorityService groupAuthorityService; // 或其他权限获取服务
     
     @Override
     public AbstractAuthenticationToken convert(Jwt jwt) {
         Collection<String> authorities = new ArrayList<>(jwt.getClaimAsStringList("authorities"));
         
-        // 添加组权限
+        // 添加组权限（根据您的实现方式调用相应服务）
         Collection<String> groups = jwt.getClaimAsStringList("groups");
         if (groups != null) {
             for (String group : groups) {
+                // 示例：使用注入的服务获取组权限
+                // 您可以替换为其他实现方式
                 authorities.addAll(groupAuthorityService.getGroupAuthorities(group));
             }
         }
