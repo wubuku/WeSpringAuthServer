@@ -109,31 +109,61 @@ public class SecurityConfig {
 ### 第四步：创建权限转换器
 
 ```java
+@Component
 public class CustomJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
+    
+    private static final Logger logger = LoggerFactory.getLogger(CustomJwtAuthenticationConverter.class);
+    
+    // 如需组权限支持，注入组权限服务（可选）
+    @Autowired(required = false)
+    private GroupAuthorityService groupAuthorityService;
     
     @Override
     public AbstractAuthenticationToken convert(Jwt jwt) {
-        // 从 JWT 提取直接权限
-        Collection<String> authorities = jwt.getClaimAsStringList("authorities");
-        if (authorities == null) {
-            authorities = new ArrayList<>();
-        }
+        Set<GrantedAuthority> authorities = new HashSet<>();
         
-        // 从 JWT 提取组信息并转换为权限（可选）
-        Collection<String> groups = jwt.getClaimAsStringList("groups");
-        if (groups != null) {
-            // 根据业务需求获取组对应的权限，可以通过以下方式：
-            // - 查询数据库：authorities.addAll(getGroupAuthorities(groups));
-            // - 调用外部服务：authorities.addAll(externalService.getGroupAuthorities(groups));
-            // - 从缓存获取：authorities.addAll(cacheService.getGroupAuthorities(groups));
-            // - 使用配置文件映射：authorities.addAll(configService.getGroupAuthorities(groups));
-        }
+        logger.debug("Converting JWT to Authentication for subject: {}", jwt.getSubject());
         
-        Collection<GrantedAuthority> grantedAuthorities = authorities.stream()
+        // 1. 添加直接权限
+        // WeSpringAuthServer在JWT的"authorities"声明中包含用户的直接权限
+        Set<String> directAuthorities = getClaimAsSet(jwt, "authorities");
+        logger.debug("Direct authorities from JWT: {}", directAuthorities);
+        directAuthorities.stream()
             .map(SimpleGrantedAuthority::new)
-            .collect(Collectors.toList());
+            .forEach(authorities::add);
             
-        return new JwtAuthenticationToken(jwt, grantedAuthorities);
+        // 2. 从组获取权限（如果配置了组权限服务）
+        // WeSpringAuthServer在JWT的"groups"声明中包含用户所属的组
+        if (groupAuthorityService != null) {
+            Set<String> groups = getClaimAsSet(jwt, "groups");
+            logger.debug("Groups from JWT: {}", groups);
+            
+            groups.stream()
+                .map(group -> {
+                    Set<String> groupAuths = groupAuthorityService.getGroupAuthorities(group);
+                    logger.debug("Authorities for group {}: {}", group, groupAuths);
+                    return groupAuths;
+                })
+                .flatMap(Set::stream)
+                .map(SimpleGrantedAuthority::new)
+                .forEach(authorities::add);
+        }
+        
+        logger.debug("Final combined authorities: {}", authorities);
+        return new JwtAuthenticationToken(jwt, authorities);
+    }
+    
+    /**
+     * 从JWT声明中获取字符串集合
+     */
+    @SuppressWarnings("unchecked")
+    private Set<String> getClaimAsSet(Jwt jwt, String claimName) {
+        Object claim = jwt.getClaims().get(claimName);
+        if (claim instanceof Collection) {
+            return new HashSet<>((Collection<String>) claim);
+        }
+        logger.debug("No {} found in JWT claims", claimName);
+        return Collections.emptySet();
     }
 }
 ```
@@ -225,23 +255,41 @@ public class DataSourceConfig {
 2. **创建组权限服务**（数据库查询示例）：
 ```java
 @Service
-@Cacheable("groupAuthorities")
 public class GroupAuthorityService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(GroupAuthorityService.class);
     
     @Autowired
     private JdbcTemplate securityJdbcTemplate;
     
+    /**
+     * 获取指定组的所有权限
+     * 
+     * @param groupName 组名（包含GROUP_前缀，如"GROUP_ADMIN_GROUP"）
+     * @return 该组拥有的所有权限集合
+     */
     @Cacheable(value = "groupAuthorities", key = "#groupName")
     public Set<String> getGroupAuthorities(String groupName) {
-        // 示例：从数据库查询组权限
+        logger.debug("Loading authorities from database for group: {}", groupName);
+        
+        // 查询组权限的SQL（基于WeSpringAuthServer的实际表结构）
         String sql = """
-            SELECT DISTINCT ad.authority_definition_id 
-            FROM authority_assignments aa
-            JOIN authority_definitions ad ON aa.authority_definition_id = ad.authority_definition_id
-            WHERE aa.assigned_to_id = ? AND aa.assigned_to_type = 'GROUP'
+            SELECT ga.authority 
+            FROM group_authorities ga
+            JOIN groups g ON ga.group_id = g.id 
+            WHERE g.group_name = ?
             """;
             
-        return new HashSet<>(securityJdbcTemplate.queryForList(sql, String.class, groupName));
+        // 移除GROUP_前缀来匹配数据库中的组名
+        // WeSpringAuthServer在JWT中使用GROUP_前缀，但数据库中存储的是不带前缀的组名
+        String dbGroupName = groupName.replace("GROUP_", "");
+        
+        Set<String> authorities = new HashSet<>(
+            securityJdbcTemplate.queryForList(sql, String.class, dbGroupName)
+        );
+        
+        logger.debug("Loaded {} authorities from database for group: {}", authorities.size(), groupName);
+        return authorities;
     }
 }
 ```
@@ -253,33 +301,55 @@ public class GroupAuthorityService {
 > - **缓存服务**: 从 Redis 等缓存中获取预计算的组权限
 > - **消息队列**: 通过 MQ 异步获取权限信息
 
-3. **更新权限转换器**（示例实现）：
+3. **更新权限转换器**（完整示例实现）：
 ```java
+@Component
 public class CustomJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
     
-    // 注入您选择的组权限服务实现
+    private static final Logger logger = LoggerFactory.getLogger(CustomJwtAuthenticationConverter.class);
+    
     @Autowired
-    private GroupAuthorityService groupAuthorityService; // 或其他权限获取服务
+    private GroupAuthorityService groupAuthorityService;
     
     @Override
     public AbstractAuthenticationToken convert(Jwt jwt) {
-        Collection<String> authorities = new ArrayList<>(jwt.getClaimAsStringList("authorities"));
+        Set<GrantedAuthority> authorities = new HashSet<>();
         
-        // 添加组权限（根据您的实现方式调用相应服务）
-        Collection<String> groups = jwt.getClaimAsStringList("groups");
-        if (groups != null) {
-            for (String group : groups) {
-                // 示例：使用注入的服务获取组权限
-                // 您可以替换为其他实现方式
-                authorities.addAll(groupAuthorityService.getGroupAuthorities(group));
-            }
-        }
+        logger.debug("Converting JWT to Authentication for subject: {}", jwt.getSubject());
         
-        Collection<GrantedAuthority> grantedAuthorities = authorities.stream()
+        // 1. 添加直接权限
+        Set<String> directAuthorities = getClaimAsSet(jwt, "authorities");
+        logger.debug("Direct authorities from JWT: {}", directAuthorities);
+        directAuthorities.stream()
             .map(SimpleGrantedAuthority::new)
-            .collect(Collectors.toList());
+            .forEach(authorities::add);
             
-        return new JwtAuthenticationToken(jwt, grantedAuthorities);
+        // 2. 从组获取权限
+        Set<String> groups = getClaimAsSet(jwt, "groups");
+        logger.debug("Groups from JWT: {}", groups);
+        
+        groups.stream()
+            .map(group -> {
+                Set<String> groupAuths = groupAuthorityService.getGroupAuthorities(group);
+                logger.debug("Authorities for group {}: {}", group, groupAuths);
+                return groupAuths;
+            })
+            .flatMap(Set::stream)
+            .map(SimpleGrantedAuthority::new)
+            .forEach(authorities::add);
+        
+        logger.debug("Final combined authorities: {}", authorities);
+        return new JwtAuthenticationToken(jwt, authorities);
+    }
+    
+    @SuppressWarnings("unchecked")
+    private Set<String> getClaimAsSet(Jwt jwt, String claimName) {
+        Object claim = jwt.getClaims().get(claimName);
+        if (claim instanceof Collection) {
+            return new HashSet<>((Collection<String>) claim);
+        }
+        logger.debug("No {} found in JWT claims", claimName);
+        return Collections.emptySet();
     }
 }
 ```
