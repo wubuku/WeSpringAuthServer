@@ -230,6 +230,69 @@
         i {
             font-style: normal !important;
         }
+        
+        /* 用户搜索样式 */
+        .search-container {
+            position: relative;
+            width: 100%;
+        }
+        .search-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        .search-input:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+        .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        .search-dropdown.show {
+            display: block;
+        }
+        .dropdown-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+        .dropdown-item:hover {
+            background-color: #f8f9fa;
+        }
+        .dropdown-item.selected {
+            background-color: #007bff;
+            color: white;
+        }
+        .user-info {
+            font-size: 14px;
+        }
+        .user-name {
+            font-weight: 500;
+            color: #333;
+        }
+        .user-identifications {
+            font-size: 12px;
+            color: #666;
+            margin-top: 2px;
+        }
     </style>
 </head>
 <body>
@@ -263,7 +326,17 @@
             </div>
             <div class="select-container">
                 <label for="target">Select User or Group:</label>
-                <select id="target"></select>
+                <!-- 用户选择：搜索输入框 + 下拉列表 -->
+                <div id="user-search-container" class="search-container">
+                    <input type="text" 
+                           id="user-search-input" 
+                           class="search-input" 
+                           placeholder="Search users by username or identification..."
+                           autocomplete="off">
+                    <div id="user-dropdown" class="search-dropdown"></div>
+                </div>
+                <!-- 组选择：传统下拉框 -->
+                <select id="group-select" style="display: none;"></select>
             </div>
         </div>
 
@@ -288,6 +361,8 @@
         let currentTarget = null;
         let currentTargetType = 'user';
         let groups = [];
+        let searchTimeout = null;
+        let currentUsers = [];
 
         function showLoading() {
             document.getElementById('loading-overlay').style.display = 'flex';
@@ -330,7 +405,6 @@
                     // 禁用选择器
                     document.getElementById('userTypeRadio').disabled = true;
                     document.getElementById('groupTypeRadio').disabled = true;
-                    document.getElementById('target').disabled = true;
                     
                     // 设置当前值
                     currentTargetType = type;
@@ -338,8 +412,14 @@
                     
                     // 更新选择器并设置值
                     await updateTargetSelect();
-                    const targetSelect = document.getElementById('target');
-                    targetSelect.value = target;
+                    
+                    if (currentTargetType === 'user') {
+                        // 对于用户类型，设置搜索输入框的值
+                        document.getElementById('user-search-input').value = target;
+                    } else {
+                        // 对于组类型，设置下拉选择器的值
+                        document.getElementById('group-select').value = target;
+                    }
                     
                     // 加载目标权限
                     currentTarget = target;
@@ -352,7 +432,6 @@
                     // 启用所有控件
                     document.getElementById('userTypeRadio').disabled = false;
                     document.getElementById('groupTypeRadio').disabled = false;
-                    document.getElementById('target').disabled = false;
                     
                     // 监听类型选择变化
                     document.querySelectorAll('input[name="targetType"]').forEach(radio => {
@@ -362,8 +441,11 @@
                         });
                     });
                     
-                    // 监听目标选择变化
-                    document.getElementById('target').addEventListener('change', async (e) => {
+                    // 设置用户搜索功能
+                    setupUserSearch();
+                    
+                    // 监听组选择变化
+                    document.getElementById('group-select').addEventListener('change', async (e) => {
                         currentTarget = e.target.value;
                         currentAuthoritys.clear();
                         
@@ -385,12 +467,17 @@
             }
         });
 
-        // Load users from backend
-        async function loadUsers() {
-            showLoading();
+        // Load users from backend with search
+        async function loadUsers(search = '') {
             try {
-                console.log('Fetching users list...');
-                                 const response = await fetch('/api/authorities/users', {
+                console.log('Fetching users list with search:', search);
+                const params = new URLSearchParams();
+                if (search.trim()) {
+                    params.append('search', search.trim());
+                }
+                params.append('limit', '20');
+                
+                const response = await fetch(`/api/authorities/users?${params}`, {
                     headers: {
                         [[${ _csrf.headerName }]]: [[${ _csrf.token }]]
                     }
@@ -402,8 +489,6 @@
                 console.error('Error loading users:', error);
                 showError('Failed to load users: ' + error.message);
                 return [];
-            } finally {
-                hideLoading();
             }
         }
 
@@ -446,25 +531,27 @@
 
         // 更新选择器选项
         async function updateTargetSelect() {
-            const select = document.getElementById('target');
-            select.innerHTML = '<option value="">Select...</option>';
-            
             if (currentTargetType === 'user') {
-                const users = await loadUsers();
-                if (Array.isArray(users)) {
-                    users.forEach(username => {
-                        const option = document.createElement('option');
-                        option.value = username;
-                        option.textContent = username;
-                        select.appendChild(option);
-                    });
-                }
+                // 显示用户搜索容器，隐藏组选择器
+                document.getElementById('user-search-container').style.display = 'block';
+                document.getElementById('group-select').style.display = 'none';
+                
+                // 清空搜索输入框
+                document.getElementById('user-search-input').value = '';
+                document.getElementById('user-dropdown').classList.remove('show');
             } else {
+                // 显示组选择器，隐藏用户搜索容器
+                document.getElementById('user-search-container').style.display = 'none';
+                document.getElementById('group-select').style.display = 'block';
+                
+                // 填充组选择器
+                const groupSelect = document.getElementById('group-select');
+                groupSelect.innerHTML = '<option value="">Select Group...</option>';
                 groups.forEach(group => {
                     const option = document.createElement('option');
                     option.value = group.id;
                     option.textContent = group.name;
-                    select.appendChild(option);
+                    groupSelect.appendChild(option);
                 });
             }
             
@@ -763,6 +850,117 @@
             return childAuthoritys.map(perm => 
                 document.querySelector(`input[data-authority="${perm}"]`)
             ).filter(Boolean);
+        }
+        
+        // 设置用户搜索功能
+        function setupUserSearch() {
+            const searchInput = document.getElementById('user-search-input');
+            const dropdown = document.getElementById('user-dropdown');
+            
+            // 搜索输入事件
+            searchInput.addEventListener('input', function() {
+                const searchValue = this.value.trim();
+                
+                // 清除之前的定时器
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                
+                // 设置新的定时器，300ms后执行搜索
+                searchTimeout = setTimeout(async () => {
+                    if (searchValue.length >= 1) {
+                        await searchUsers(searchValue);
+                    } else {
+                        dropdown.classList.remove('show');
+                    }
+                }, 300);
+            });
+            
+            // 点击输入框时，如果有搜索结果则显示下拉列表
+            searchInput.addEventListener('focus', function() {
+                if (currentUsers.length > 0) {
+                    dropdown.classList.add('show');
+                }
+            });
+            
+            // 点击外部隐藏下拉列表
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.classList.remove('show');
+                }
+            });
+        }
+        
+        // 搜索用户
+        async function searchUsers(search) {
+            try {
+                currentUsers = await loadUsers(search);
+                displayUserDropdown(currentUsers);
+            } catch (error) {
+                console.error('Error searching users:', error);
+                showError('Failed to search users');
+            }
+        }
+        
+        // 显示用户下拉列表
+        function displayUserDropdown(users) {
+            const dropdown = document.getElementById('user-dropdown');
+            
+            if (users.length === 0) {
+                dropdown.innerHTML = '<div class="dropdown-item">No users found</div>';
+            } else {
+                dropdown.innerHTML = users.map(user => {
+                    const displayName = user.username;
+                    const identifications = user.identifications ? user.identifications : '';
+                    
+                    return `
+                        <div class="dropdown-item" data-username="${user.username}">
+                            <div class="user-info">
+                                <div class="user-name">${displayName}</div>
+                                ${identifications ? `<div class="user-identifications">${identifications}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // 添加点击事件
+                dropdown.querySelectorAll('.dropdown-item[data-username]').forEach(item => {
+                    item.addEventListener('click', function() {
+                        const username = this.dataset.username;
+                        selectUser(username);
+                    });
+                });
+            }
+            
+            dropdown.classList.add('show');
+        }
+        
+        // 选择用户
+        async function selectUser(username) {
+            const searchInput = document.getElementById('user-search-input');
+            const dropdown = document.getElementById('user-dropdown');
+            
+            // 更新输入框显示
+            const selectedUser = currentUsers.find(u => u.username === username);
+            if (selectedUser) {
+                searchInput.value = selectedUser.username;
+                if (selectedUser.identifications) {
+                    searchInput.title = `${selectedUser.username} - ${selectedUser.identifications}`;
+                }
+            }
+            
+            // 隐藏下拉列表
+            dropdown.classList.remove('show');
+            
+            // 设置当前目标并加载权限
+            currentTarget = username;
+            currentAuthoritys.clear();
+            
+            if (currentTarget) {
+                await loadTargetAuthoritys();
+            }
+            
+            renderAuthorityTree();
         }
 
         function showError(message) {
