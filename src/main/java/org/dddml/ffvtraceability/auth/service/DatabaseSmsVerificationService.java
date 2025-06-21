@@ -25,12 +25,22 @@ import java.util.UUID;
  */
 @Service
 public class DatabaseSmsVerificationService implements SmsVerificationService {
+    /**
+     * Prefix for user IDs created through mobile phone verification.
+     * <p>
+     * This prefix identifies users who were automatically registered in the system
+     * after successfully authenticating via SMS verification code. The prefix
+     * allows the system to distinguish between these automatically created accounts
+     * and accounts created through other registration methods.
+     */
+    public static final String MV_PREFIX = "MV_";
+
     private static final Logger logger = LoggerFactory.getLogger(DatabaseSmsVerificationService.class);
 
     // Constants
     private static final String MOBILE_NUMBER_TYPE = "MOBILE_NUMBER";
-    private static final String USERNAME_PREFIX = "mp_";
-    private static final int USERNAME_SUFFIX_LENGTH = 20; // Increased from 10 to 20 for better uniqueness
+    //private static final String USERNAME_PREFIX = "mp_";
+    //private static final int USERNAME_SUFFIX_LENGTH = 20; // Increased from 10 to 20 for better uniqueness
 
     // Rate limit constants
     private static final int RATE_LIMIT_PER_MINUTE = 1;
@@ -108,7 +118,8 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
      */
     private String createUserByMobileNumber(String mobileNumber) {
         // Generate a random username and password
-        String username = USERNAME_PREFIX + UUID.randomUUID().toString().replace("-", "").substring(0, USERNAME_SUFFIX_LENGTH);
+        String username = MV_PREFIX + mobileNumber;
+        // String username = USERNAME_PREFIX + UUID.randomUUID().toString().replace("-", "").substring(0, USERNAME_SUFFIX_LENGTH);
         String password = UUID.randomUUID().toString();
 
         logger.info("Creating new mobile user: username={}, mobile number={}", username, mobileNumber);
