@@ -507,3 +507,181 @@ aggregates:
 5. **文档更新**: 使用删除线语法保留了设计演进历史，反映了重构完成状态
 
 这次重构确保了系统的长期可维护性和概念一致性，为未来的扩展奠定了坚实基础。
+
+## 🛠️ 开发指南与最佳实践
+
+### 测试数据管理
+
+#### 测试用户和角色
+项目提供了完整的测试用户体系，涵盖不同权限级别：
+
+| 用户名 | 密码 | 角色 | 权限描述 |
+|--------|------|------|----------|
+| `hq_admin` | `hq123` | 总部管理员 | 拥有所有权限（32个权限） |
+| `distributor_admin` | `dist123` | 经销商管理员 | 经销商相关管理权限（17个权限） |
+| `store_admin` | `store123` | 门店管理员 | 门店相关管理权限（10个权限） |
+| `consultant` | `cons123` | 咨询师 | 基础只读权限（4个权限） |
+| `distributor_employee` | `emp123` | 经销商员工 | 基础只读权限（4个权限） |
+
+#### JWT令牌获取
+```bash
+# 获取所有测试用户的JWT令牌
+cd scripts
+./get-test-user-tokens.sh
+
+# 加载令牌到环境变量
+source all-test-tokens.env
+
+# 使用令牌测试API
+curl -H "Authorization: Bearer $HQ_ADMIN_ACCESS_TOKEN" http://localhost:9000/api/users
+```
+
+### 脚本开发规范
+
+#### 1. 避免硬编码URL
+❌ **错误做法**：
+```bash
+curl http://localhost:9000/login
+curl http://localhost:9000/oauth2/token
+```
+
+✅ **正确做法**：
+```bash
+BASE_URL="http://localhost:9000"
+curl ${BASE_URL}/login
+curl ${BASE_URL}/oauth2/token
+```
+
+#### 2. 脚本命名规范
+- 使用描述性名称，避免无意义的后缀（如`final`、`new`等）
+- 保持一致的命名风格：`get-test-user-tokens.sh`
+- 及时清理不再使用的脚本文件
+
+#### 3. 数据库操作最佳实践
+- 使用`ON CONFLICT DO NOTHING`确保脚本可重复运行
+- 在运行中的应用上操作数据库时，优先使用SQL脚本而非重启应用
+- 验证数据插入结果：
+```sql
+-- 验证用户创建
+SELECT username, enabled FROM users WHERE username IN ('hq_admin', 'distributor_admin');
+
+-- 验证权限分配
+SELECT username, authority FROM authorities WHERE username = 'hq_admin';
+```
+
+### 密码管理
+
+#### 生成测试密码
+使用`PasswordEncoderTest`生成BCrypt编码密码：
+```java
+@Test
+public void generateTestUserPasswords() {
+    PasswordEncoder encoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    String encodedPassword = encoder.encode("hq123");
+    System.out.println("编码密码: " + encodedPassword);
+}
+```
+
+#### 密码设计原则
+- 测试环境使用容易记忆的密码（如`hq123`、`dist123`）
+- 生产环境必须使用强密码
+- 所有密码都必须经过BCrypt编码存储
+
+### OAuth2测试流程
+
+#### 完整的授权码流程测试
+1. **获取授权码**：访问`/oauth2/authorize`端点
+2. **用户登录**：提交用户名密码到`/login`
+3. **获取令牌**：使用授权码换取访问令牌
+4. **验证令牌**：解码JWT查看权限信息
+
+#### 脚本化测试
+- 使用`test.sh`进行单用户测试
+- 使用`get-test-user-tokens.sh`批量获取多用户令牌
+- 令牌自动保存到`all-test-tokens.env`文件
+
+### 权限系统设计
+
+#### 角色层次结构
+```
+ROLE_HQ_ADMIN (总部管理员)
+├── 所有业务权限
+├── 用户管理权限
+└── 系统管理权限
+
+ROLE_DISTRIBUTOR_ADMIN (经销商管理员)
+├── 经销商业务权限
+├── 仓库管理权限
+└── 部分用户管理权限
+
+ROLE_STORE_ADMIN (门店管理员)
+├── 门店业务权限
+├── 位置管理权限
+└── 基础查看权限
+
+ROLE_CONSULTANT (咨询师)
+└── 基础只读权限
+
+ROLE_DISTRIBUTOR_EMPLOYEE (经销商员工)
+└── 基础只读权限
+```
+
+#### 权限命名规范
+- 使用`模块_操作`格式：`Users_Read`、`Vendors_Create`
+- 角色使用`ROLE_`前缀：`ROLE_ADMIN`、`ROLE_HQ_ADMIN`
+- 保持权限粒度适中，既不过于细化也不过于粗糙
+
+### 文档维护
+
+#### 实时更新原则
+- 代码变更后立即更新相关文档
+- 脚本重命名后更新所有引用
+- 保持文档与实际代码状态一致
+
+#### 文档结构
+- 需求文档：`docs/drafts/任务名称.md`
+- 完成报告：`docs/drafts/任务名称-完成报告.md`
+- 集成指南：`docs/integration-guide.md`
+
+### 常见陷阱与解决方案
+
+#### 1. Shell脚本兼容性
+❌ **问题**：使用关联数组导致某些shell不兼容
+```bash
+declare -A TEST_USERS=(["user1"]="pass1")  # 不兼容
+```
+
+✅ **解决**：使用简单数组和字符串分割
+```bash
+TEST_USERS="user1:pass1 user2:pass2"
+for user_pair in $TEST_USERS; do
+    username=$(echo "$user_pair" | cut -d':' -f1)
+    password=$(echo "$user_pair" | cut -d':' -f2)
+done
+```
+
+#### 2. OAuth2流程调试
+- 使用`curl -v`查看详细HTTP交互
+- 检查CSRF令牌是否正确获取和传递
+- 验证授权码是否成功提取
+- 确认客户端认证信息正确
+
+#### 3. 数据库状态管理
+- 在运行中的应用上操作数据库时，避免删除现有数据
+- 使用`INSERT ... ON CONFLICT`确保幂等性
+- 操作前后都要验证数据状态
+
+### 工具依赖
+开发和测试需要以下工具：
+- `jq` - JSON处理
+- `curl` - HTTP客户端
+- `openssl` - 加密工具
+- `psql` - PostgreSQL客户端
+
+```bash
+# macOS安装
+brew install jq curl openssl postgresql
+
+# Ubuntu安装
+apt-get install jq curl openssl-tool postgresql-client
+```
