@@ -21,6 +21,31 @@ public class PasswordEncoderTest {
     }
 
     @Test
+    public void generateTestUserPasswords() {
+        PasswordEncoder encoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
+        
+        // 为测试用户生成容易记忆的密码
+        String[][] testUsers = {
+            {"hq_admin", "hq123"},
+            {"distributor_admin", "dist123"},
+            {"store_admin", "store123"},
+            {"consultant", "cons123"},
+            {"distributor_employee", "emp123"}
+        };
+        
+        System.out.println("=== 测试用户密码编码结果 ===");
+        for (String[] user : testUsers) {
+            String username = user[0];
+            String rawPassword = user[1];
+            String encodedPassword = encoder.encode(rawPassword);
+            System.out.println("用户: " + username);
+            System.out.println("原始密码: " + rawPassword);
+            System.out.println("编码密码: " + encodedPassword);
+            System.out.println("---");
+        }
+    }
+
+    @Test
     public void testClientSecretEncoding() {
         PasswordEncoder encoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
         String rawClientSecret = "secret";

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# 服务器配置
+BASE_URL="http://localhost:9000"
+
 # 用户凭证配置
 USERNAME="admin" # admin / user
 PASSWORD="admin"
@@ -34,7 +37,7 @@ fi
 rm -f cookies.txt
 
 # 获取登录页面和 CSRF token
-login_page=$(curl -c cookies.txt -b cookies.txt -s -H "Accept: text/html" http://localhost:9000/login)
+login_page=$(curl -c cookies.txt -b cookies.txt -s -H "Accept: text/html" ${BASE_URL}/login)
 csrf_token=$(echo "$login_page" | grep -o 'name="_csrf".*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | tr -d '\n')
 
 echo "🔐 CSRF Token: $csrf_token"
@@ -52,7 +55,7 @@ fi
 #echo "📝 Encoded CSRF Token: $encoded_csrf_token"
 
 # 执行登录并捕获完整响应
-login_response=$(curl -X POST http://localhost:9000/login \
+login_response=$(curl -X POST ${BASE_URL}/login \
     -c cookies.txt -b cookies.txt \
     -H "Accept: text/html,application/xhtml+xml" \
     -H "Content-Type: application/x-www-form-urlencoded" \
@@ -70,7 +73,7 @@ if echo "$login_response" | grep -q "/password/change"; then
         -c cookies.txt -b cookies.txt \
         -H "Accept: text/html" \
         ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
-        http://localhost:9000/password/change)
+        ${BASE_URL}/password/change)
     
     new_csrf_token=$(echo "$change_password_page" | grep -o 'name="_csrf".*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | tr -d '\n')
     state_token=$(echo "$change_password_page" | grep -o 'name="state".*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | tr -d '\n')
@@ -79,7 +82,7 @@ if echo "$login_response" | grep -q "/password/change"; then
     echo "🔐 State Token: $state_token"
     
     # 提交密码修改
-    change_password_response=$(curl -s -X POST http://localhost:9000/password/change \
+    change_password_response=$(curl -s -X POST ${BASE_URL}/password/change \
         -c cookies.txt -b cookies.txt \
         ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
         -H "Content-Type: application/x-www-form-urlencoded" \
@@ -103,11 +106,11 @@ if echo "$login_response" | grep -q "/password/change"; then
     echo "🔄 Logging in with new password..."
     
     # 获取新的登录页面和 CSRF token
-    login_page=$(curl -c cookies.txt -b cookies.txt -s -H "Accept: text/html" http://localhost:9000/login)
+    login_page=$(curl -c cookies.txt -b cookies.txt -s -H "Accept: text/html" ${BASE_URL}/login)
     csrf_token=$(echo "$login_page" | grep -o 'name="_csrf".*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | tr -d '\n')
     
     # 使用新密码登录
-    login_response=$(curl -X POST http://localhost:9000/login \
+    login_response=$(curl -X POST ${BASE_URL}/login \
         -c cookies.txt -b cookies.txt \
         -H "Accept: text/html,application/xhtml+xml" \
         -H "Content-Type: application/x-www-form-urlencoded" \
@@ -163,7 +166,7 @@ auth_page=$(curl -s \
     -c cookies.txt -b cookies.txt \
     --max-redirs 0 \
     --no-location \
-    "http://localhost:9000/oauth2/authorize?\
+    "${BASE_URL}/oauth2/authorize?\
 client_id=ffv-client&\
 response_type=code&\
 scope=openid%20profile&\
@@ -190,7 +193,7 @@ if echo "$auth_page" | grep -q "Consent required"; then
     auth_response=$(curl -s \
         ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
         -c cookies.txt -b cookies.txt \
-        "http://localhost:9000/oauth2/authorize" \
+        "${BASE_URL}/oauth2/authorize" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "client_id=ffv-client" \
         -d "state=$state" \
@@ -260,7 +263,7 @@ encoded_auth_code=$(urlencode "$auth_code")
 
 # 获取访问令牌
 echo -e "\n🔄 Requesting access token..."
-token_response=$(curl -v -X POST "http://localhost:9000/oauth2/token" \
+token_response=$(curl -v -X POST "${BASE_URL}/oauth2/token" \
     ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -H "Authorization: Basic $(echo -n 'ffv-client:secret' | base64)" \

@@ -11,7 +11,12 @@
 -- 创建用户组（不再手动指定 ID，使用DO NOTHING避免重复插入）
 INSERT INTO groups (group_name, enabled) VALUES 
     ('ADMIN_GROUP', true),
-    ('USER_GROUP', true)
+    ('USER_GROUP', true),
+    ('HQ_ADMIN_GROUP', true),
+    ('DISTRIBUTOR_ADMIN_GROUP', true),
+    ('STORE_ADMIN_GROUP', true),
+    ('CONSULTANT_GROUP', true),
+    ('DISTRIBUTOR_EMPLOYEE_GROUP', true)
 ON CONFLICT (group_name) DO NOTHING;
 
 -- 我们使用了 JDBC 来存储 session，在测试阶段，我们自动清理 session 表中的数据！
@@ -26,7 +31,13 @@ ON CONFLICT (group_name) DO NOTHING;
 -- 创建测试用户 (使用ON CONFLICT避免重复插入)
 INSERT INTO users (username, password, enabled, password_change_required, first_login, password_last_changed) VALUES
     ('admin', '{bcrypt}$2a$10$eKBDBSf4DBNzRwbF7fx5IetdKKjqzkYoST0F7Dkro84eRiDTBJYky', true, false, false, CURRENT_TIMESTAMP),  -- password=admin
-    ('user', '{bcrypt}$2a$10$eKBDBSf4DBNzRwbF7fx5IetdKKjqzkYoST0F7Dkro84eRiDTBJYky', true, true, true, null)   -- password=admin
+    ('user', '{bcrypt}$2a$10$eKBDBSf4DBNzRwbF7fx5IetdKKjqzkYoST0F7Dkro84eRiDTBJYky', true, true, true, null),   -- password=admin
+    -- 新增的测试用户
+    ('hq_admin', '{bcrypt}$2a$10$WX8ouiJg.KT4RCFxCdfATudErurseawM2dHtlE2SXYAU0IEF9zKI.', true, false, false, CURRENT_TIMESTAMP),  -- password=hq123
+    ('distributor_admin', '{bcrypt}$2a$10$fMEcFK6P5EATp4CD5P1P6.c86Haw9p7kolTtvhFzkfMhGdIH8JbHO', true, false, false, CURRENT_TIMESTAMP),  -- password=dist123
+    ('store_admin', '{bcrypt}$2a$10$HoULU5oixEHgHVZAIqX1lueng0ls0LcfD4TbL8Be5oc7CpGSatv0y', true, false, false, CURRENT_TIMESTAMP),  -- password=store123
+    ('consultant', '{bcrypt}$2a$10$q4ZW6VAWdxHEY8iL/lwfhecLwh3WaDvhywDVgki2JwPBXK2ZfvT8.', true, false, false, CURRENT_TIMESTAMP),  -- password=cons123
+    ('distributor_employee', '{bcrypt}$2a$10$nk4.os29D8FnllyyXOsu3uy1ExfH45rH3sVeksDdnZD7K6K7i2FN.', true, false, false, CURRENT_TIMESTAMP)  -- password=emp123
 ON CONFLICT (username) DO NOTHING;
 
 -- 给 admin 用户添加 ROLE_ADMIN 权限（auth server 使用这个权限对特权操作进行保护）
@@ -37,6 +48,94 @@ ON CONFLICT (username, authority) DO NOTHING;
 INSERT INTO authorities (username, authority) VALUES 
     ('admin', 'Users_Read'),
     ('admin', 'Roles_Read')
+ON CONFLICT (username, authority) DO NOTHING;
+
+-- 为新测试用户添加角色权限
+-- 总部管理员 - 拥有所有权限
+INSERT INTO authorities (username, authority) VALUES 
+    ('hq_admin', 'ROLE_HQ_ADMIN'),
+    ('hq_admin', 'ROLE_ADMIN'),
+    ('hq_admin', 'Users_Read'),
+    ('hq_admin', 'Users_Create'),
+    ('hq_admin', 'Users_Update'),
+    ('hq_admin', 'Users_Disable'),
+    ('hq_admin', 'Roles_Read'),
+    ('hq_admin', 'Roles_Create'),
+    ('hq_admin', 'Roles_Update'),
+    ('hq_admin', 'Roles_Disable'),
+    ('hq_admin', 'Vendors_Read'),
+    ('hq_admin', 'Vendors_Create'),
+    ('hq_admin', 'Vendors_Update'),
+    ('hq_admin', 'Vendors_Disable'),
+    ('hq_admin', 'Items_Read'),
+    ('hq_admin', 'Items_Create'),
+    ('hq_admin', 'Items_Update'),
+    ('hq_admin', 'Items_Disable'),
+    ('hq_admin', 'Warehouses_Read'),
+    ('hq_admin', 'Warehouses_Create'),
+    ('hq_admin', 'Warehouses_Update'),
+    ('hq_admin', 'Warehouses_Disable'),
+    ('hq_admin', 'Procurement_Read'),
+    ('hq_admin', 'Procurement_Create'),
+    ('hq_admin', 'Procurement_Update'),
+    ('hq_admin', 'Procurement_ApproveUpdates'),
+    ('hq_admin', 'Receiving_Read'),
+    ('hq_admin', 'Receiving_Create'),
+    ('hq_admin', 'Receiving_Update'),
+    ('hq_admin', 'Receiving_ApproveUpdates'),
+    ('hq_admin', 'QA_Read'),
+    ('hq_admin', 'QA_Create')
+ON CONFLICT (username, authority) DO NOTHING;
+
+-- 经销商管理员 - 经销商相关管理权限
+INSERT INTO authorities (username, authority) VALUES 
+    ('distributor_admin', 'ROLE_DISTRIBUTOR_ADMIN'),
+    ('distributor_admin', 'Vendors_Read'),
+    ('distributor_admin', 'Items_Read'),
+    ('distributor_admin', 'Warehouses_Read'),
+    ('distributor_admin', 'Warehouses_Create'),
+    ('distributor_admin', 'Warehouses_Update'),
+    ('distributor_admin', 'Procurement_Read'),
+    ('distributor_admin', 'Procurement_Create'),
+    ('distributor_admin', 'Procurement_Update'),
+    ('distributor_admin', 'Procurement_RequestUpdates'),
+    ('distributor_admin', 'Receiving_Read'),
+    ('distributor_admin', 'Receiving_Create'),
+    ('distributor_admin', 'Receiving_Update'),
+    ('distributor_admin', 'Receiving_RequestUpdates'),
+    ('distributor_admin', 'Users_Read'),
+    ('distributor_admin', 'Users_Create'),
+    ('distributor_admin', 'Users_Update')
+ON CONFLICT (username, authority) DO NOTHING;
+
+-- 门店管理员 - 门店相关管理权限
+INSERT INTO authorities (username, authority) VALUES 
+    ('store_admin', 'ROLE_STORE_ADMIN'),
+    ('store_admin', 'Items_Read'),
+    ('store_admin', 'Locations_Read'),
+    ('store_admin', 'Locations_Create'),
+    ('store_admin', 'Locations_Update'),
+    ('store_admin', 'Receiving_Read'),
+    ('store_admin', 'Receiving_Create'),
+    ('store_admin', 'QA_Read'),
+    ('store_admin', 'QA_Create'),
+    ('store_admin', 'Users_Read')
+ON CONFLICT (username, authority) DO NOTHING;
+
+-- 咨询师 - 基础角色
+INSERT INTO authorities (username, authority) VALUES 
+    ('consultant', 'ROLE_CONSULTANT'),
+    ('consultant', 'Items_Read'),
+    ('consultant', 'Vendors_Read'),
+    ('consultant', 'QA_Read')
+ON CONFLICT (username, authority) DO NOTHING;
+
+-- 经销商员工 - 基础角色
+INSERT INTO authorities (username, authority) VALUES 
+    ('distributor_employee', 'ROLE_DISTRIBUTOR_EMPLOYEE'),
+    ('distributor_employee', 'Items_Read'),
+    ('distributor_employee', 'Receiving_Read'),
+    ('distributor_employee', 'Procurement_Read')
 ON CONFLICT (username, authority) DO NOTHING;
 
 -- 设置组权限 (注释掉以避免重复插入错误)
