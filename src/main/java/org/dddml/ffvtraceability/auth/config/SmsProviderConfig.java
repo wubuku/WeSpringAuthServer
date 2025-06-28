@@ -1,8 +1,7 @@
 package org.dddml.ffvtraceability.auth.config;
 
-import com.aliyuncs.DefaultAcsClient;
-import com.aliyuncs.IAcsClient;
-import com.aliyuncs.profile.DefaultProfile;
+import com.aliyun.dysmsapi20170525.Client;
+import com.aliyun.teaopenapi.models.Config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dddml.ffvtraceability.auth.service.sms.AliyunSmsProvider;
 import org.dddml.ffvtraceability.auth.service.sms.HuoshanSmsProvider;
@@ -19,16 +18,44 @@ import org.springframework.web.client.RestTemplate;
 @Configuration
 public class SmsProviderConfig {
 
+    /**
+     * 阿里云短信服务客户端（V2.0 SDK）
+     */
     @Bean
-    public IAcsClient acsClient(SmsProperties smsProperties) {
+    public Client aliyunSmsClient(SmsProperties smsProperties) throws Exception {
         SmsProperties.Aliyun aliyunConfig = smsProperties.getAliyun();
-        return new DefaultAcsClient(
-                DefaultProfile.getProfile(
-                        aliyunConfig.getRegion(),
-                        aliyunConfig.getAccessKeyId(),
-                        aliyunConfig.getAccessKeySecret()
-                )
-        );
+        
+        Config config = new Config()
+                // 优先从环境变量获取AccessKey，如果没有则使用配置文件
+                .setAccessKeyId(getAccessKeyId(aliyunConfig))
+                .setAccessKeySecret(getAccessKeySecret(aliyunConfig));
+        
+        // 配置端点
+        config.endpoint = "dysmsapi.aliyuncs.com";
+        
+        return new Client(config);
+    }
+    
+    /**
+     * 获取AccessKeyId，优先从环境变量获取
+     */
+    private String getAccessKeyId(SmsProperties.Aliyun aliyunConfig) {
+        String envKeyId = System.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID");
+        if (envKeyId != null && !envKeyId.trim().isEmpty()) {
+            return envKeyId;
+        }
+        return aliyunConfig.getAccessKeyId();
+    }
+    
+    /**
+     * 获取AccessKeySecret，优先从环境变量获取
+     */
+    private String getAccessKeySecret(SmsProperties.Aliyun aliyunConfig) {
+        String envKeySecret = System.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET");
+        if (envKeySecret != null && !envKeySecret.trim().isEmpty()) {
+            return envKeySecret;
+        }
+        return aliyunConfig.getAccessKeySecret();
     }
     
     @Bean
@@ -42,8 +69,8 @@ public class SmsProviderConfig {
     }
     
     @Bean
-    public AliyunSmsProvider aliyunSmsProvider(IAcsClient acsClient, SmsProperties smsProperties) {
-        return new AliyunSmsProvider(acsClient, smsProperties.getAliyun());
+    public AliyunSmsProvider aliyunSmsProvider(Client aliyunSmsClient, SmsProperties smsProperties) {
+        return new AliyunSmsProvider(aliyunSmsClient, smsProperties.getAliyun());
     }
     
     @Bean

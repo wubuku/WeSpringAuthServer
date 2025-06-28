@@ -1,11 +1,8 @@
 package org.dddml.ffvtraceability.auth.service.sms;
 
-import com.aliyuncs.CommonRequest;
-import com.aliyuncs.CommonResponse;
-import com.aliyuncs.IAcsClient;
-import com.aliyuncs.exceptions.ClientException;
-import com.aliyuncs.http.MethodType;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.aliyun.dysmsapi20170525.Client;
+import com.aliyun.dysmsapi20170525.models.SendSmsRequest;
+import com.aliyun.dysmsapi20170525.models.SendSmsResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dddml.ffvtraceability.auth.config.SmsProperties;
 import org.slf4j.Logger;
@@ -15,71 +12,65 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Implementation of SmsProvider for Aliyun SMS service
+ * Implementation of SmsProvider for Aliyun SMS service using V2.0 SDK
  */
 public class AliyunSmsProvider implements SmsProvider {
     private static final Logger logger = LoggerFactory.getLogger(AliyunSmsProvider.class);
-    private static final String DOMAIN = "dysmsapi.aliyuncs.com";
-    private static final String ACTION = "SendSms";
-    private static final String VERSION = "2017-05-25";
-    private final IAcsClient client;
+    
+    // 常量定义
+    private static final String TEMPLATE_PARAM_CODE = "code";
+    private static final String SUCCESS_CODE = "OK";
+    private static final String PROVIDER_NAME = "aliyun";
+    
+    private final Client client;
     private final SmsProperties.Aliyun config;
     private final ObjectMapper objectMapper;
 
-    public AliyunSmsProvider(IAcsClient client, SmsProperties.Aliyun config) {
+    public AliyunSmsProvider(Client client, SmsProperties.Aliyun config) {
         this.client = client;
         this.config = config;
         this.objectMapper = new ObjectMapper();
+        logger.info("AliyunSmsProvider initialized with V2.0 SDK");
     }
 
     @Override
     public boolean sendVerificationCode(String phoneNumber, String code) {
-        CommonRequest request = new CommonRequest();
-        request.setSysMethod(MethodType.POST);
-        request.setSysDomain(DOMAIN);
-        request.setSysVersion(VERSION);
-        request.setSysAction(ACTION);
-
-        // Set SMS parameters
-        Map<String, String> templateParam = new HashMap<>();
-        templateParam.put("code", code);
-
         try {
+            // 构建模板参数
+            Map<String, String> templateParam = new HashMap<>();
+            templateParam.put(TEMPLATE_PARAM_CODE, code);
             String templateParamJson = objectMapper.writeValueAsString(templateParam);
-
-            request.putQueryParameter("RegionId", config.getRegion());
-            request.putQueryParameter("PhoneNumbers", phoneNumber);
-            request.putQueryParameter("SignName", config.getSignName());
-            request.putQueryParameter("TemplateCode", config.getTemplateCode());
-            request.putQueryParameter("TemplateParam", templateParamJson);
-
-            CommonResponse response = client.getCommonResponse(request);
-            String responseData = response.getData();
-
-            // Parse response
-            JsonNode root = objectMapper.readTree(responseData);
-            String code1 = root.path("Code").asText();
-
-            boolean success = "OK".equalsIgnoreCase(code1);
-
+            
+            // 构建请求
+            SendSmsRequest request = new SendSmsRequest()
+                    .setPhoneNumbers(phoneNumber)
+                    .setSignName(config.getSignName())
+                    .setTemplateCode(config.getTemplateCode())
+                    .setTemplateParam(templateParamJson);
+            
+            // 发送请求
+            SendSmsResponse response = client.sendSms(request);
+            
+            // 检查响应
+            boolean success = SUCCESS_CODE.equalsIgnoreCase(response.getBody().getCode());
+            
             if (success) {
-                logger.info("Successfully sent SMS via Aliyun to {}, response: {}", phoneNumber, responseData);
+                logger.info("Successfully sent SMS via Aliyun V2.0 SDK to {}, BizId: {}", 
+                    phoneNumber, response.getBody().getBizId());
             } else {
-                logger.error("Failed to send SMS via Aliyun to {}, response: {}", phoneNumber, responseData);
+                logger.error("Failed to send SMS via Aliyun V2.0 SDK to {}, Code: {}, Message: {}", 
+                    phoneNumber, response.getBody().getCode(), response.getBody().getMessage());
             }
-
+            
             return success;
-        } catch (ClientException e) {
-            logger.error("Aliyun SMS client exception", e);
-            return false;
         } catch (Exception e) {
-            logger.error("Error sending SMS via Aliyun", e);
+            logger.error("Error sending SMS via Aliyun V2.0 SDK to " + phoneNumber, e);
             return false;
         }
     }
 
     @Override
     public String getProviderName() {
-        return "aliyun";
+        return PROVIDER_NAME;
     }
 } 

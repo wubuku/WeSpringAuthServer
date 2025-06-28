@@ -22,9 +22,23 @@ import java.util.Map;
  */
 public class HuoshanSmsProvider implements SmsProvider {
     private static final Logger logger = LoggerFactory.getLogger(HuoshanSmsProvider.class);
+    
+    // 常量定义
     private static final String ACTION = "SendSms";
     private static final String VERSION = "2020-01-01";
     private static final String SERVICE = "volcSMS";
+    private static final String PROVIDER_NAME = "huoshan";
+    private static final String TEMPLATE_PARAM_CODE_FORMAT = "{\"code\":\"%s\"}";
+    private static final String HMAC_SHA256_ALGORITHM = "HmacSHA256";
+    private static final String AUTHORIZATION_FORMAT = "HMAC-SHA256 Credential=%s/%s/%s/%s/request, SignedHeaders=content-type;host;x-date;x-service, Signature=%s";
+    private static final String CANONICAL_REQUEST_FORMAT = "POST\n/\n" +
+            "action=%s&version=%s\n" +
+            "content-type:application/json\n" +
+            "host:%s\n" +
+            "x-date:%s\n" +
+            "x-service:%s\n\n" +
+            "content-type;host;x-date;x-service";
+    
     private final SmsProperties.Huoshan config;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -35,14 +49,13 @@ public class HuoshanSmsProvider implements SmsProvider {
         this.objectMapper = new ObjectMapper();
     }
 
-
     @Override
     public boolean sendVerificationCode(String phoneNumber, String code) {
         SmsSendRequest request = new SmsSendRequest();
         request.setSmsAccount(config.getSmsAccount());
         request.setSign(config.getSignName());
         request.setTemplateId(config.getTemplateId());
-        request.setTemplateParam("{\"code\":\"" + code + "\"}");
+        request.setTemplateParam(String.format(TEMPLATE_PARAM_CODE_FORMAT, code));
         request.setPhoneNumbers(phoneNumber);
         
         SmsServiceInfoConfig smsServiceInfoConfig = new SmsServiceInfoConfig(config.getAccessKeyId(), config.getSecretKey());
@@ -64,33 +77,25 @@ public class HuoshanSmsProvider implements SmsProvider {
     private String generateAuthorization(Map<String, Object> bodyParams, String action, String timestamp) {
         try {
             // 生成标准的HMAC-SHA256授权头格式
-            String canonicalRequest = "POST\n/" +
-                    "\n" +
-                    "action=" + action + "&" +
-                    "version=" + VERSION + "\n" +
-                    "content-type:application/json\n" +
-                    "host:" + config.getEndpoint().replace("https://", "") + "\n" +
-                    "x-date:" + timestamp + "\n" +
-                    "x-service:" + SERVICE + "\n" +
-                    "\n" +
-                    "content-type;host;x-date;x-service";
+            String host = config.getEndpoint().replace("https://", "");
+            String canonicalRequest = String.format(CANONICAL_REQUEST_FORMAT,
+                    action, VERSION, host, timestamp, SERVICE);
 
             // Create signing key
             String signingKey = config.getSecretKey();
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(signingKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            Mac mac = Mac.getInstance(HMAC_SHA256_ALGORITHM);
+            mac.init(new SecretKeySpec(signingKey.getBytes(StandardCharsets.UTF_8), HMAC_SHA256_ALGORITHM));
 
             // Calculate signature
             byte[] signatureBytes = mac.doFinal(canonicalRequest.getBytes(StandardCharsets.UTF_8));
             String signature = Base64.getEncoder().encodeToString(signatureBytes);
 
             // Generate authorization header
-            return "HMAC-SHA256 Credential=" + config.getAccessKeyId() + "/" +
-                    timestamp.substring(0, 8) + "/" +
-                    config.getEndpoint().replace("https://", "").split("\\.")[0] + "/" +
-                    SERVICE + "/request, " +
-                    "SignedHeaders=content-type;host;x-date;x-service, " +
-                    "Signature=" + signature;
+            String region = host.split("\\.")[0];
+            String dateStamp = timestamp.substring(0, 8);
+            
+            return String.format(AUTHORIZATION_FORMAT,
+                    config.getAccessKeyId(), dateStamp, region, SERVICE, signature);
         } catch (Exception e) {
             logger.error("Error generating Huoshan authorization header", e);
             return "";
@@ -99,6 +104,6 @@ public class HuoshanSmsProvider implements SmsProvider {
 
     @Override
     public String getProviderName() {
-        return "huoshan";
+        return PROVIDER_NAME;
     }
 } 
