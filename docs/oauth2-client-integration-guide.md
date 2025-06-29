@@ -254,6 +254,36 @@ export class OAuth2Service {
       // 不抛出错误，因为本地清理仍然有效
     }
   }
+
+  // OIDC RP-Initiated Logout（完整登出）
+  initiateLogout(postLogoutRedirectUri?: string): void {
+    const logoutUrl = new URL(`${this.baseUrl}/connect/logout`);
+    
+    // 添加登出后重定向URI
+    if (postLogoutRedirectUri) {
+      logoutUrl.searchParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
+    }
+    
+    // 如果有ID token，添加id_token_hint（可选，但推荐）
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        if (user.idToken) {
+          logoutUrl.searchParams.set('id_token_hint', user.idToken);
+        }
+      } catch (error) {
+        console.error('Failed to parse stored user for logout:', error);
+      }
+    }
+    
+    // 清理本地数据
+    localStorage.removeItem('user');
+    localStorage.removeItem('oauth2_state');
+    
+    // 重定向到授权服务器的logout端点
+    window.location.href = logoutUrl.toString();
+  }
 }
 
 export const oauth2Service = new OAuth2Service();
@@ -274,6 +304,7 @@ interface ExtendedUser extends User {
   groups?: string[];
   accessToken?: string;
   refreshToken?: string;
+  idToken?: string;  // OIDC ID Token，用于logout
   tokenExpiresAt?: number;
 }
 
@@ -286,6 +317,7 @@ type AuthContextType = {
   loginWithOAuth2: () => Promise<void>;
   logout: () => void;
   refreshToken: () => Promise<boolean>;
+  logoutWithRedirect: () => void;
 };
 
 // 创建认证上下文
@@ -474,6 +506,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // OIDC 完整登出（跳转到授权服务器）
+  const logoutWithRedirect = () => {
+    if (user?.accessToken && isOAuth2Enabled) {
+      // 构建登出后重定向URI
+      const postLogoutRedirectUri = `${window.location.origin}/login`;
+      oauth2Service.initiateLogout(postLogoutRedirectUri);
+    } else {
+      // 非OAuth2用户，执行简单登出
+      logout();
+    }
+  };
+
   // 提供认证上下文
   const contextValue: AuthContextType = {
     user,
@@ -483,6 +527,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithOAuth2,
     logout,
     refreshToken,
+    logoutWithRedirect,
   };
 
   return (
@@ -736,10 +781,11 @@ export default function OAuth2CallbackPage() {
         console.log('Exchanging authorization code for tokens...');
         const tokenResponse = await oauth2Service.exchangeCodeForTokens(code);
 
-        // 获取用户信息
-        console.log('Fetching user info...');
+        // 获取用户信息和权限
         const userInfo = await oauth2Service.getUserInfo(tokenResponse.access_token);
-
+        const authorities = userInfo.authorities || [];
+        const groups = userInfo.groups || [];
+        
         // 转换为应用用户对象
         const appUser = oauth2Service.mapOAuth2UserToAppUser(userInfo, tokenResponse.access_token);
         
@@ -748,7 +794,8 @@ export default function OAuth2CallbackPage() {
           ...appUser,
           accessToken: tokenResponse.access_token,
           refreshToken: tokenResponse.refresh_token,
-          tokenExpiresAt: Date.now() + tokenResponse.expires_in * 1000,
+          idToken: tokenResponse.id_token,
+          expiresAt: Date.now() + tokenResponse.expires_in * 1000,
         };
 
         // 保存用户信息
@@ -1458,7 +1505,7 @@ export default function PermissionGuard({
 
 ### 创建 API 客户端
 
-创建 `lib/api-client.ts` 文件：
+创建 `lib/api-client.ts` 文件，为 API 调用自动添加认证头：
 
 ```typescript
 import { getSession } from "next-auth/react"
@@ -1783,10 +1830,91 @@ A: 确保：
 2. 登录页面和 API 路由不需要认证
 3. 检查 `NEXTAUTH_URL` 配置是否正确
 
-### Q: 开发环境 HTTPS 问题？
-A: 如果 WeSpringAuthServer 使用 HTTPS 而开发环境使用 HTTP：
-1. 在 WeSpringAuthServer 中允许 HTTP 回调 URL（仅开发环境）
-2. 或使用开发环境 HTTPS 证书
+### Q: 开发与生产环境切换
+**问题**: 需要在模拟认证和 OAuth2 认证之间切换
+
+**解决方案**:
+1. 使用环境变量 `NEXT_PUBLIC_OAUTH_ENABLED` 控制
+2. 开发环境设为 `false`，生产环境设为 `true`
+3. 确保两种模式下的用户数据结构兼容
+
+### Q: Logout 端点 404 错误 ⚠️
+**问题**: 客户端跳转到 `/logout` 收到 404 错误：`{"type":"about:blank","title":"Not Found","status":404,"detail":"No static resource logout."}`
+
+**原因分析**: WeSpringAuthServer 的默认 OIDC logout 端点是 `/connect/logout`，而不是 `/logout`
+
+**解决方案**:
+
+#### 方案 1：使用正确的 logout 端点（推荐）
+```typescript
+// 在需要登出的组件中
+import { useAuth } from '@/contexts/auth-context'
+
+export default function LogoutButton() {
+  const { logoutWithRedirect, logout } = useAuth()
+  
+  return (
+    <div className="space-x-2">
+      {/* 完整 OIDC logout（推荐） */}
+      <button onClick={logoutWithRedirect}>
+        安全退出
+      </button>
+      
+      {/* 简单 logout（仅清理本地数据） */}
+      <button onClick={logout}>
+        快速退出
+      </button>
+    </div>
+  )
+}
+```
+
+#### 方案 2：配置服务器端自定义 logout 端点
+如果确实需要使用 `/logout` 端点，可以在 WeSpringAuthServer 中配置：
+
+```java
+// 在 AuthorizationServerConfig.java 中配置
+@Bean
+public AuthorizationServerSettings authorizationServerSettings() {
+    return AuthorizationServerSettings.builder()
+            .issuer(authServerProperties.getIssuer())
+            .oidcLogoutEndpoint("/logout")  // 自定义 logout 端点
+            .build();
+}
+```
+
+#### 两种 Logout 方式的区别：
+
+| 方式 | 端点 | 行为 | 适用场景 |
+|------|------|------|----------|
+| **完整 OIDC Logout** | `/connect/logout` | 跳转到授权服务器，清理服务器会话，然后跳转回客户端 | 生产环境，安全要求高 |
+| **简单 Logout** | 无服务器调用 | 仅清理客户端数据和撤销令牌 | 开发环境，快速测试 |
+
+#### URL 示例：
+```
+# 正确的 OIDC logout URL
+http://localhost:9000/connect/logout?post_logout_redirect_uri=http://127.0.0.1:3000/login
+
+# 错误的 URL（会产生 404）
+http://localhost:9000/logout?post_logout_redirect_uri=http://127.0.0.1:3000
+```
+
+#### ⚠️ 重要：id_token_hint 参数
+
+OIDC logout端点**必须**包含 `id_token_hint` 参数：
+
+```
+# 完整的正确OIDC logout URL
+http://localhost:9000/connect/logout?id_token_hint=ID_TOKEN_VALUE&post_logout_redirect_uri=http://127.0.0.1:3000/login
+
+# 如果缺少id_token_hint会收到错误：
+# {"error":"invalid_request","error_description":"OpenID Connect 1.0 Logout Request Parameter: id_token_hint"}
+```
+
+**测试步骤**：
+1. 完成OAuth2登录获取ID token
+2. 使用 `logoutWithRedirect()` 方法（自动包含id_token_hint）
+3. 或手动构建包含所有必需参数的logout URL
 
 ## 📚 更多资源
 

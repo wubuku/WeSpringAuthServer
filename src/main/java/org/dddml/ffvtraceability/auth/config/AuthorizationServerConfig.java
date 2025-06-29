@@ -314,8 +314,10 @@ public class AuthorizationServerConfig {
             issuer = "http://localhost:9000";
         }
         logger.info("AuthorizationServerSettings using issuer: {}", issuer);
+        //logger.info("Configuring custom OIDC logout endpoint: /logout");
         return AuthorizationServerSettings.builder()
                 .issuer(issuer)
+                //.oidcLogoutEndpoint("/logout")  // 自定义logout端点，兼容客户端的/logout调用
                 .build();
     }
 
