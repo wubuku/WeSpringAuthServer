@@ -1,262 +1,851 @@
 # WeSpringAuthServer OAuth2 Client 集成指南
 
-> 🎯 **目标**: 让您的前端应用（以 Next.js 14 + TypeScript 为例）快速集成 WeSpringAuthServer 作为 OAuth2 Client
+> 🎯 **目标**: 让您的前端应用（以 RuiChuangQi-AI admin-console 为例）快速集成 WeSpringAuthServer 作为 OAuth2 Client
 
 ## 📖 概述
 
-本指南将帮助您将前端应用配置为 OAuth2 Client，实现用户通过 WeSpringAuthServer 进行统一登录认证。我们以 Next.js 14 + TypeScript 技术栈为例，展示完整的集成流程。
+本指南将帮助您将现有的前端应用改造为 OAuth2 Client，实现用户通过 WeSpringAuthServer 进行统一登录认证。我们以实际项目 **RuiChuangQi-AI/src/admin-console**（Next.js 14 + TypeScript）为例，展示从模拟认证到 OAuth2 认证的完整迁移流程。
 
 ### OAuth2 角色说明
 - **Authorization Server**: WeSpringAuthServer（认证服务器）
 - **Client**: 您的前端应用（本指南重点）
 - **Resource Server**: 后端 API 服务（参见 [资源服务器集成指南](./resource-server-integration-guide.md)）
 
+### 当前项目分析
+
+根据对目标项目的分析，当前架构特点：
+- 🔧 **技术栈**: Next.js 14 + TypeScript + Tailwind CSS + SWR
+- 🔐 **认证方式**: 自定义 AuthContext + localStorage（模拟认证）
+- 👥 **用户角色**: 6种复杂角色体系 (`headquarters_admin`, `distributor_admin`, 等)
+- 🛡️ **权限系统**: 基于资源-动作模式的细粒度权限控制
+- 📦 **状态管理**: React Context API
+- 🎨 **UI组件**: 基于 Radix UI 的自定义组件库
+
 ## ⚡ 快速开始
 
-### 第一步：安装依赖
+### 第一步：安装 OAuth2 依赖
 
-在您的 Next.js 项目中添加 OAuth2 相关依赖：
+由于项目已使用自定义认证，我们选择轻量级方案：
 
 ```bash
-npm install next-auth@beta @auth/core
-# 或使用 yarn
-yarn add next-auth@beta @auth/core
+npm install @types/jsonwebtoken
+# 或使用 yarn  
+yarn add @types/jsonwebtoken
 ```
 
-> 💡 **注意**: 我们使用 next-auth v5 (beta) 版本，它对 Next.js 14 App Router 有更好的支持
+> 💡 **设计决策**: 考虑到项目已有成熟的认证架构，我们采用**渐进式迁移**策略，保留现有的 AuthContext 结构，仅替换底层认证逻辑
 
 ### 第二步：配置环境变量
 
-在项目根目录创建或更新 `.env.local` 文件：
+更新项目根目录的 `.env.local` 文件（已存在），添加 OAuth2 配置：
 
 ```bash
-# OAuth2 配置
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-secret-key-here
+# 保留现有配置
+NEXT_PUBLIC_API_MOCKING=enabled
+NEXT_PUBLIC_API_URL=http://localhost:3000/api
+NEXT_PUBLIC_BAIDU_MAP_API_KEY=YOUR_BAIDU_MAP_API_KEY
 
-# WeSpringAuthServer 配置
-OAUTH_AUTHORIZATION_URL=http://localhost:9000/oauth2/authorize
-OAUTH_TOKEN_URL=http://localhost:9000/oauth2/token
-OAUTH_USERINFO_URL=http://localhost:9000/userinfo
+# 新增 OAuth2 配置
+NEXT_PUBLIC_OAUTH_ENABLED=true
+NEXT_PUBLIC_WESPRING_AUTH_URL=http://localhost:9000
+NEXT_PUBLIC_OAUTH_CLIENT_ID=admin-console-client
+NEXT_PUBLIC_OAUTH_REDIRECT_URI=http://localhost:3000/auth/callback
+
+# 服务端 OAuth2 配置（敏感信息）
+OAUTH_CLIENT_SECRET=your-client-secret-here
 OAUTH_JWKS_URL=http://localhost:9000/oauth2/jwks
-
-# OAuth2 Client 配置
-OAUTH_CLIENT_ID=your-client-id
-OAUTH_CLIENT_SECRET=your-client-secret
-OAUTH_REDIRECT_URI=http://localhost:3000/api/auth/callback/wespring
 ```
 
-> ⚠️ **重要**: 请将这些配置值替换为您在 WeSpringAuthServer 中注册的实际 Client 信息
+更新 `.env.local.example` 文件，为其他开发者提供配置模板：
 
-### 第三步：创建 Auth.js 配置
+```bash
+# 保留原有内容，新增以下配置：
 
-创建 `lib/auth.ts` 文件：
+# OAuth2 Configuration - 是否启用 OAuth2 认证（false 时使用模拟认证）
+NEXT_PUBLIC_OAUTH_ENABLED=false
+NEXT_PUBLIC_WESPRING_AUTH_URL=http://localhost:9000
+NEXT_PUBLIC_OAUTH_CLIENT_ID=admin-console-client
+NEXT_PUBLIC_OAUTH_REDIRECT_URI=http://localhost:3000/auth/callback
+
+# Server-side OAuth2 secrets (仅生产环境需要)
+OAUTH_CLIENT_SECRET=your-client-secret-here
+OAUTH_JWKS_URL=http://localhost:9000/oauth2/jwks
+```
+
+> 💡 **设计优势**: 使用环境变量控制认证模式，开发环境可继续使用模拟认证，生产环境启用 OAuth2
+
+### 第三步：创建 OAuth2 服务
+
+创建 `lib/oauth2-service.ts` 文件，实现 OAuth2 认证逻辑：
 
 ```typescript
-import type { NextAuthConfig } from "next-auth"
-import { JWT } from "next-auth/jwt"
+import { User, UserRole } from '@/types';
 
-// 扩展 JWT 类型以包含我们需要的字段
-declare module "next-auth/jwt" {
-  interface JWT {
-    accessToken?: string
-    refreshToken?: string
-    authorities?: string[]
-    groups?: string[]
-    expiresAt?: number
+// OAuth2 认证服务
+export class OAuth2Service {
+  private baseUrl: string;
+  private clientId: string;
+  private redirectUri: string;
+  private clientSecret: string;
+
+  constructor() {
+    this.baseUrl = process.env.NEXT_PUBLIC_WESPRING_AUTH_URL || 'http://localhost:9000';
+    this.clientId = process.env.NEXT_PUBLIC_OAUTH_CLIENT_ID || 'admin-console-client';
+    this.redirectUri = process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI || 'http://localhost:3000/auth/callback';
+    this.clientSecret = process.env.OAUTH_CLIENT_SECRET || '';
   }
-}
 
-// 扩展 Session 类型
-declare module "next-auth" {
-  interface Session {
-    accessToken?: string
-    authorities?: string[]
-    groups?: string[]
-    error?: string
+  // 生成授权 URL
+  getAuthorizationUrl(state?: string): string {
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: this.clientId,
+      redirect_uri: this.redirectUri,
+      scope: 'openid profile email authorities groups',
+      state: state || Math.random().toString(36).substring(7),
+    });
+
+    return `${this.baseUrl}/oauth2/authorize?${params.toString()}`;
   }
-}
 
-export const authConfig: NextAuthConfig = {
-  providers: [
-    {
-      id: "wespring",
-      name: "WeSpring Auth Server",
-      type: "oauth",
-      authorization: {
-        url: process.env.OAUTH_AUTHORIZATION_URL!,
-        params: {
-          scope: "openid profile email authorities groups",
-          response_type: "code",
-        },
-      },
-      token: process.env.OAUTH_TOKEN_URL!,
-      userinfo: process.env.OAUTH_USERINFO_URL!,
-      clientId: process.env.OAUTH_CLIENT_ID!,
-      clientSecret: process.env.OAUTH_CLIENT_SECRET!,
-      // 用户信息映射
-      profile(profile) {
-        console.log("Profile from WeSpringAuthServer:", profile)
-        return {
-          id: profile.sub,
-          name: profile.name || profile.preferred_username,
-          email: profile.email,
-          // 保存权限和组信息
-          authorities: profile.authorities || [],
-          groups: profile.groups || [],
-        }
-      },
-    },
-  ],
-  pages: {
-    signIn: "/login",
-    error: "/login", // 错误时重定向到登录页
-  },
-  callbacks: {
-    // JWT 回调 - 处理令牌
-    async jwt({ token, account, profile }) {
-      console.log("JWT callback triggered")
-      
-      // 初次登录时保存 OAuth2 令牌信息
-      if (account && profile) {
-        console.log("Initial login - saving tokens")
-        token.accessToken = account.access_token
-        token.refreshToken = account.refresh_token
-        token.authorities = profile.authorities || []
-        token.groups = profile.groups || []
-        // 计算过期时间
-        token.expiresAt = Date.now() + (account.expires_in || 3600) * 1000
-      }
-      
-      // 检查令牌是否即将过期（提前5分钟刷新）
-      if (token.expiresAt && Date.now() > token.expiresAt - 300000) {
-        console.log("Token expiring soon, attempting refresh")
-        return await refreshAccessToken(token)
-      }
-      
-      return token
-    },
-    
-    // Session 回调 - 构建客户端 session
-    async session({ session, token }) {
-      console.log("Session callback triggered")
-      
-      if (token.error) {
-        console.error("Token error:", token.error)
-        session.error = token.error as string
-      }
-      
-      // 将令牌信息传递给客户端
-      session.accessToken = token.accessToken as string
-      session.authorities = token.authorities as string[]
-      session.groups = token.groups as string[]
-      
-      return session
-    },
-    
-    // 授权回调 - 控制页面访问权限
-    authorized({ request, auth }) {
-      const { pathname } = request.nextUrl
-      
-      // 公开页面
-      if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
-        return true
-      }
-      
-      // 需要登录的页面
-      return !!auth?.user
-    },
-  },
-  // 启用调试模式（开发环境）
-  debug: process.env.NODE_ENV === "development",
-}
-
-// 刷新访问令牌
-async function refreshAccessToken(token: JWT): Promise<JWT> {
-  try {
-    console.log("Refreshing access token...")
-    
-    const response = await fetch(process.env.OAUTH_TOKEN_URL!, {
-      method: "POST",
+  // 交换授权码获取令牌
+  async exchangeCodeForTokens(code: string): Promise<{
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    id_token?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/oauth2/token`, {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: token.refreshToken!,
-        client_id: process.env.OAUTH_CLIENT_ID!,
-        client_secret: process.env.OAUTH_CLIENT_SECRET!,
+        grant_type: 'authorization_code',
+        code,
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        redirect_uri: this.redirectUri,
       }),
-    })
-
-    const refreshedTokens = await response.json()
+    });
 
     if (!response.ok) {
-      console.error("Token refresh failed:", refreshedTokens)
-      throw new Error("Token refresh failed")
+      const error = await response.text();
+      throw new Error(`Token exchange failed: ${error}`);
     }
 
-    console.log("Token refreshed successfully")
-    return {
-      ...token,
-      accessToken: refreshedTokens.access_token,
-      refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
-      expiresAt: Date.now() + refreshedTokens.expires_in * 1000,
+    return response.json();
+  }
+
+  // 获取用户信息
+  async getUserInfo(accessToken: string): Promise<{
+    sub: string;
+    name: string;
+    email: string;
+    authorities: string[];
+    groups: string[];
+    [key: string]: any;
+  }> {
+    const response = await fetch(`${this.baseUrl}/userinfo`, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user info');
     }
-  } catch (error) {
-    console.error("Error refreshing access token:", error)
+
+    return response.json();
+  }
+
+  // 刷新访问令牌
+  async refreshAccessToken(refreshToken: string): Promise<{
+    access_token: string;
+    refresh_token?: string;
+    expires_in: number;
+  }> {
+    const response = await fetch(`${this.baseUrl}/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Token refresh failed');
+    }
+
+    return response.json();
+  }
+
+  // 转换 OAuth2 用户信息为应用用户对象
+  mapOAuth2UserToAppUser(oauth2User: any, accessToken: string): User {
+    // 从权限中推断用户角色
+    const role = this.mapAuthoritiesToRole(oauth2User.authorities || []);
+    
     return {
-      ...token,
-      error: "RefreshAccessTokenError",
+      id: oauth2User.sub,
+      name: oauth2User.name || oauth2User.preferred_username,
+      phone: oauth2User.phone || '', // 可能需要从其他地方获取
+      email: oauth2User.email,
+      role,
+      active: true,
+      avatarUrl: oauth2User.picture,
+      
+      // OAuth2 特有字段
+      authorities: oauth2User.authorities || [],
+      groups: oauth2User.groups || [],
+      accessToken,
+      
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as User & { authorities: string[]; groups: string[]; accessToken: string };
+  }
+
+  // 从权限映射到用户角色
+  private mapAuthoritiesToRole(authorities: string[]): UserRole {
+    // 根据权限推断角色，优先级从高到低
+    if (authorities.includes('ROLE_ADMIN') || authorities.includes('ROLE_HEADQUARTERS_ADMIN')) {
+      return 'headquarters_admin';
+    }
+    if (authorities.includes('ROLE_DISTRIBUTOR_ADMIN')) {
+      return 'distributor_admin';
+    }
+    if (authorities.includes('ROLE_DISTRIBUTOR_EMPLOYEE')) {
+      return 'distributor_employee';
+    }
+    if (authorities.includes('ROLE_STORE_ADMIN')) {
+      return 'store_admin';
+    }
+    if (authorities.includes('ROLE_CONSULTANT')) {
+      return 'consultant';
+    }
+    if (authorities.includes('ROLE_CUSTOMER')) {
+      return 'customer';
+    }
+    
+    // 默认角色
+    return 'customer';
+  }
+
+  // 撤销令牌（登出）
+  async revokeToken(token: string): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/oauth2/revoke`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          token,
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        }),
+      });
+    } catch (error) {
+      console.error('Token revocation failed:', error);
+      // 不抛出错误，因为本地清理仍然有效
     }
   }
 }
+
+export const oauth2Service = new OAuth2Service();
 ```
 
-### 第四步：配置 Auth.js Route Handler
+### 第四步：更新认证上下文
 
-创建 `app/api/auth/[...nextauth]/route.ts` 文件：
-
-```typescript
-import NextAuth from "next-auth"
-import { authConfig } from "@/lib/auth"
-
-const handler = NextAuth(authConfig)
-
-export { handler as GET, handler as POST }
-```
-
-### 第五步：创建认证中间件
-
-创建 `middleware.ts` 文件（项目根目录）：
+修改现有的 `contexts/auth-context.tsx` 文件，添加 OAuth2 支持：
 
 ```typescript
-import { NextRequest } from "next/server"
-import { auth } from "@/lib/auth"
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User } from '@/types';
+import { oauth2Service } from '@/lib/oauth2-service';
 
-export default auth((req: NextRequest & { auth: any }) => {
-  const { pathname } = req.nextUrl
-  
-  // 记录访问日志
-  console.log(`${req.method} ${pathname} - Auth:`, !!req.auth)
-  
-  // 如果用户未登录且访问受保护页面，重定向到登录页
-  if (!req.auth && !pathname.startsWith("/login") && !pathname.startsWith("/api/auth/")) {
-    const loginUrl = new URL("/login", req.url)
-    loginUrl.searchParams.set("callbackUrl", pathname)
-    return Response.redirect(loginUrl)
+// 扩展用户类型以包含 OAuth2 信息
+interface ExtendedUser extends User {
+  authorities?: string[];
+  groups?: string[];
+  accessToken?: string;
+  refreshToken?: string;
+  tokenExpiresAt?: number;
+}
+
+// 认证上下文类型
+type AuthContextType = {
+  user: ExtendedUser | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => Promise<boolean>;
+  loginWithOAuth2: () => Promise<void>;
+  logout: () => void;
+  refreshToken: () => Promise<boolean>;
+};
+
+// 创建认证上下文
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// 认证提供者组件
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<ExtendedUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 检查是否启用 OAuth2
+  const isOAuth2Enabled = process.env.NEXT_PUBLIC_OAUTH_ENABLED === 'true';
+
+  // 检查本地存储中是否有用户数据
+  useEffect(() => {
+    const initializeAuth = async () => {
+      setIsLoading(true);
+      
+      try {
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser) as ExtendedUser;
+          
+          // 如果是 OAuth2 用户，检查令牌是否过期
+          if (parsedUser.accessToken && parsedUser.tokenExpiresAt) {
+            const now = Date.now();
+            const expiresAt = parsedUser.tokenExpiresAt;
+            
+            // 如果令牌即将过期（提前5分钟）
+            if (now > expiresAt - 300000) {
+              console.log("Token expiring soon, attempting refresh...");
+              const refreshSuccess = await refreshTokenSilently(parsedUser);
+              if (!refreshSuccess) {
+                console.log("Token refresh failed, clearing user data");
+                localStorage.removeItem("user");
+                setUser(null);
+                return;
+              }
+            }
+          }
+          
+          setUser(parsedUser);
+        }
+      } catch (error) {
+        console.error("Failed to initialize auth:", error);
+        localStorage.removeItem("user");
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
+  }, []);
+
+  // 静默刷新令牌
+  const refreshTokenSilently = async (currentUser: ExtendedUser): Promise<boolean> => {
+    if (!currentUser.refreshToken) return false;
+
+    try {
+      const tokenResponse = await oauth2Service.refreshAccessToken(currentUser.refreshToken);
+      const updatedUser = {
+        ...currentUser,
+        accessToken: tokenResponse.access_token,
+        refreshToken: tokenResponse.refresh_token || currentUser.refreshToken,
+        tokenExpiresAt: Date.now() + tokenResponse.expires_in * 1000,
+      };
+      
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      return true;
+    } catch (error) {
+      console.error("Silent token refresh failed:", error);
+      return false;
+    }
+  };
+
+  // 模拟登录（兼容现有逻辑）
+  const login = async (username: string, password: string): Promise<boolean> => {
+    if (isOAuth2Enabled) {
+      console.warn("OAuth2 is enabled, use loginWithOAuth2() instead");
+      return false;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      // 保留原有的模拟登录逻辑
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      let mockUser: User | null = null;
+      
+      if (username === "admin" && password === "password") {
+        mockUser = {
+          id: "1",
+          name: "总部管理员",
+          phone: "13800000001",
+          email: "admin@example.com",
+          role: "headquarters_admin",
+          active: true,
+          partyType: "Company",
+          partyId: "HQ-001",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      } else if (username === "distributor" && password === "password") {
+        mockUser = {
+          id: "2",
+          name: "经销商管理员",
+          phone: "13800000002",
+          email: "distributor@example.com",
+          role: "distributor_admin",
+          active: true,
+          partyType: "DistributorOrganization",
+          partyId: "DIST-001",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      } else if (username === "store" && password === "password") {
+        mockUser = {
+          id: "3",
+          name: "门店管理员",
+          phone: "13800000003",
+          email: "store@example.com",
+          role: "store_admin",
+          active: true,
+          partyType: "Store",
+          partyId: "STORE-001",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      
+      if (mockUser) {
+        setUser(mockUser);
+        localStorage.setItem("user", JSON.stringify(mockUser));
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Login error:", error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // OAuth2 登录
+  const loginWithOAuth2 = async (): Promise<void> => {
+    if (!isOAuth2Enabled) {
+      throw new Error("OAuth2 is not enabled");
+    }
+
+    // 生成 state 参数防止 CSRF
+    const state = Math.random().toString(36).substring(7);
+    localStorage.setItem("oauth2_state", state);
+    
+    // 重定向到授权服务器
+    const authUrl = oauth2Service.getAuthorizationUrl(state);
+    window.location.href = authUrl;
+  };
+
+  // 手动刷新令牌
+  const refreshToken = async (): Promise<boolean> => {
+    if (!user?.refreshToken) return false;
+    return refreshTokenSilently(user);
+  };
+
+  // 登出
+  const logout = async () => {
+    setIsLoading(true);
+    
+    try {
+      // 如果是 OAuth2 用户，撤销令牌
+      if (user?.accessToken) {
+        await oauth2Service.revokeToken(user.accessToken);
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setUser(null);
+      localStorage.removeItem("user");
+      localStorage.removeItem("oauth2_state");
+      setIsLoading(false);
+    }
+  };
+
+  // 提供认证上下文
+  const contextValue: AuthContextType = {
+    user,
+    isLoading,
+    isAuthenticated: !!user,
+    login,
+    loginWithOAuth2,
+    logout,
+    refreshToken,
+  };
+
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// 使用认证上下文的 Hook
+export function useAuth(): AuthContextType {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
-})
-
-export const config = {
-  matcher: [
-    // 排除静态文件和API认证路由
-    "/((?!api/auth|_next/static|_next/image|favicon.ico).*)",
-  ],
+  return context;
 }
 ```
 
-### 第六步：创建登录页面
+### 第五步：更新登录页面
+
+修改现有的 `app/login/page.tsx` 文件，添加 OAuth2 登录支持：
+
+```typescript
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+
+export default function LoginPage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const { login, loginWithOAuth2, isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  // 检查是否启用 OAuth2
+  const isOAuth2Enabled = process.env.NEXT_PUBLIC_OAUTH_ENABLED === 'true';
+
+  // 如果已经认证，重定向到首页
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push("/");
+    }
+  }, [isAuthenticated, router]);
+
+  // 处理传统用户名密码登录
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!username || !password) {
+      setError("请输入用户名和密码");
+      return;
+    }
+    
+    setError(null);
+    setIsLoggingIn(true);
+    
+    try {
+      const success = await login(username, password);
+      if (success) {
+        router.push("/");
+      } else {
+        setError("用户名或密码错误");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("登录失败，请重试");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  // 处理 OAuth2 登录
+  const handleOAuth2Login = async () => {
+    setError(null);
+    setIsLoggingIn(true);
+    
+    try {
+      await loginWithOAuth2();
+      // 重定向会在 loginWithOAuth2 中处理
+    } catch (err) {
+      console.error("OAuth2 login error:", err);
+      setError("OAuth2 登录失败，请重试");
+      setIsLoggingIn(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            登录到管理后台
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            {isOAuth2Enabled ? "使用统一认证服务登录" : "使用测试账号登录"}
+          </p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+            <div className="text-sm text-red-700">{error}</div>
+          </div>
+        )}
+
+        {isOAuth2Enabled ? (
+          // OAuth2 登录界面
+          <div>
+            <button
+              onClick={handleOAuth2Login}
+              disabled={isLoggingIn}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoggingIn && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              {isLoggingIn ? "正在跳转..." : "统一认证登录"}
+            </button>
+            
+            <div className="mt-4 text-center">
+              <p className="text-sm text-gray-500">
+                点击按钮将跳转到 WeSpringAuthServer 完成认证
+              </p>
+            </div>
+          </div>
+        ) : (
+          // 传统用户名密码登录界面（保持原有设计）
+          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            <div className="rounded-md shadow-sm -space-y-px">
+              <div>
+                <label htmlFor="username" className="sr-only">
+                  用户名
+                </label>
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="relative block w-full px-3 py-2 border border-gray-300 rounded-t-md placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                  placeholder="用户名"
+                />
+              </div>
+              <div className="relative">
+                <label htmlFor="password" className="sr-only">
+                  密码
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="relative block w-full px-3 py-2 pr-10 border border-gray-300 rounded-b-md placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                  placeholder="密码"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoggingIn && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
+                {isLoggingIn ? "登录中..." : "登录"}
+              </button>
+            </div>
+
+            <div className="text-center">
+              <p className="text-sm text-gray-500">
+                测试账号：admin/admin, distributor/distributor, store/store
+              </p>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+### 第六步：创建 OAuth2 回调处理页面
+
+创建 `app/auth/callback/page.tsx` 文件，处理 OAuth2 授权码回调：
+
+```typescript
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
+import { oauth2Service } from "@/lib/oauth2-service";
+import { Loader2 } from "lucide-react";
+
+export default function OAuth2CallbackPage() {
+  const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    const handleCallback = async () => {
+      try {
+        // 获取 URL 参数
+        const code = searchParams.get('code');
+        const state = searchParams.get('state');
+        const errorParam = searchParams.get('error');
+
+        // 检查是否有错误
+        if (errorParam) {
+          throw new Error(`OAuth2 Error: ${errorParam}`);
+        }
+
+        // 检查必要参数
+        if (!code) {
+          throw new Error('Authorization code not found');
+        }
+
+        // 验证 state 参数（防止 CSRF）
+        const storedState = localStorage.getItem('oauth2_state');
+        if (state !== storedState) {
+          throw new Error('Invalid state parameter');
+        }
+
+        setStatus('processing');
+
+        // 交换授权码获取令牌
+        console.log('Exchanging authorization code for tokens...');
+        const tokenResponse = await oauth2Service.exchangeCodeForTokens(code);
+
+        // 获取用户信息
+        console.log('Fetching user info...');
+        const userInfo = await oauth2Service.getUserInfo(tokenResponse.access_token);
+
+        // 转换为应用用户对象
+        const appUser = oauth2Service.mapOAuth2UserToAppUser(userInfo, tokenResponse.access_token);
+        
+        // 添加令牌信息
+        const userWithTokens = {
+          ...appUser,
+          accessToken: tokenResponse.access_token,
+          refreshToken: tokenResponse.refresh_token,
+          tokenExpiresAt: Date.now() + tokenResponse.expires_in * 1000,
+        };
+
+        // 保存用户信息
+        localStorage.setItem('user', JSON.stringify(userWithTokens));
+        localStorage.removeItem('oauth2_state');
+
+        setStatus('success');
+
+        // 延迟重定向，让用户看到成功消息
+        setTimeout(() => {
+          router.push('/');
+        }, 1500);
+
+      } catch (error) {
+        console.error('OAuth2 callback error:', error);
+        setError(error instanceof Error ? error.message : 'Unknown error occurred');
+        setStatus('error');
+      }
+    };
+
+    // 如果用户已经认证，直接重定向
+    if (isAuthenticated) {
+      router.push('/');
+      return;
+    }
+
+    handleCallback();
+  }, [searchParams, router, isAuthenticated]);
+
+  // 重试处理
+  const handleRetry = () => {
+    router.push('/login');
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8">
+        <div className="text-center">
+          {status === 'processing' && (
+            <>
+              <Loader2 className="mx-auto h-12 w-12 animate-spin text-indigo-600" />
+              <h2 className="mt-6 text-xl font-semibold text-gray-900">
+                正在处理认证...
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                请稍候，我们正在验证您的身份信息
+              </p>
+            </>
+          )}
+
+          {status === 'success' && (
+            <>
+              <div className="mx-auto h-12 w-12 text-green-600">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="mt-6 text-xl font-semibold text-gray-900">
+                认证成功！
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                正在跳转到管理后台...
+              </p>
+            </>
+          )}
+
+          {status === 'error' && (
+            <>
+              <div className="mx-auto h-12 w-12 text-red-600">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <h2 className="mt-6 text-xl font-semibold text-gray-900">
+                认证失败
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                {error || '未知错误，请重试'}
+              </p>
+              <div className="mt-6">
+                <button
+                  onClick={handleRetry}
+                  className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  返回登录
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### 第七步：更新权限上下文
 
 创建 `app/login/page.tsx` 文件：
 
@@ -367,54 +956,323 @@ function getErrorMessage(error: string): string {
 }
 ```
 
-### 第七步：创建 Session Provider
+### 第七步：更新权限上下文
 
-创建 `components/providers/session-provider.tsx` 文件：
+修改现有的 `contexts/permissions-context.tsx` 文件，使其支持 OAuth2 权限：
 
 ```typescript
-"use client"
+import {
+  createContext,
+  useContext,
+  ReactNode,
+  useEffect,
+  useState,
+} from "react";
+import { useAuth } from "./auth-context";
+import { UserRole, Permission } from "@/types";
 
-import { SessionProvider } from "next-auth/react"
-import { ReactNode } from "react"
+// 权限上下文类型（保持原有结构）
+type PermissionsContextType = {
+  permissions: Permission[];
+  hasPermission: (resource: string, action: string) => boolean;
+  hasPermissionForFields: (resource: string, action: string, fields: string[]) => boolean;
+  getVisibleFields: (resource: string) => string[];
+  // 新增：OAuth2 权限检查
+  hasAuthority: (authority: string) => boolean;
+  hasAnyAuthority: (...authorities: string[]) => boolean;
+  isInGroup: (group: string) => boolean;
+  isLoading: boolean;
+};
 
-interface Props {
-  children: ReactNode
+// 创建权限上下文
+const PermissionsContext = createContext<PermissionsContextType | undefined>(undefined);
+
+// 权限提供者组件
+export function PermissionsProvider({ children }: { children: ReactNode }) {
+  const { user, isLoading: authLoading } = useAuth();
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadPermissions = async () => {
+      setIsLoading(true);
+      
+      try {
+        if (!user) {
+          setPermissions([]);
+          return;
+        }
+
+        let userPermissions: Permission[];
+
+        // 检查是否为 OAuth2 用户
+        const extendedUser = user as any;
+        if (extendedUser.authorities && Array.isArray(extendedUser.authorities)) {
+          // OAuth2 用户：从 authorities 映射权限
+          userPermissions = mapAuthoritiesToPermissions(extendedUser.authorities);
+        } else {
+          // 传统用户：从角色获取权限
+          userPermissions = getPermissionsByRole(user.role);
+        }
+
+        setPermissions(userPermissions);
+      } catch (error) {
+        console.error('Failed to load permissions:', error);
+        setPermissions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (!authLoading) {
+      loadPermissions();
+    }
+  }, [user, authLoading]);
+
+  // 从 OAuth2 authorities 映射到权限
+  const mapAuthoritiesToPermissions = (authorities: string[]): Permission[] => {
+    const permissions: Permission[] = [];
+    
+    // 为每个 authority 创建对应的权限
+    authorities.forEach(authority => {
+      // 映射常见的权限模式
+      if (authority.startsWith('Users_')) {
+        const action = authority.replace('Users_', '').toLowerCase();
+        permissions.push({ resource: 'users', action });
+      } else if (authority.startsWith('Consultants_')) {
+        const action = authority.replace('Consultants_', '').toLowerCase();
+        permissions.push({ resource: 'consultants', action });
+      } else if (authority.startsWith('Customers_')) {
+        const action = authority.replace('Customers_', '').toLowerCase();
+        permissions.push({ resource: 'customers', action });
+      } else if (authority.startsWith('Stores_')) {
+        const action = authority.replace('Stores_', '').toLowerCase();
+        permissions.push({ resource: 'stores', action });
+      } else if (authority.startsWith('Distributors_')) {
+        const action = authority.replace('Distributors_', '').toLowerCase();
+        permissions.push({ resource: 'distributors', action });
+      }
+      // 角色权限
+      else if (authority === 'ROLE_ADMIN' || authority === 'ROLE_HEADQUARTERS_ADMIN') {
+        // 管理员拥有所有权限
+        permissions.push(...getAllPermissions());
+      }
+      // 可以根据需要添加更多映射规则
+    });
+
+    return permissions;
+  };
+
+  // 获取所有权限（管理员使用）
+  const getAllPermissions = (): Permission[] => {
+    return [
+      // 用户管理
+      { resource: "users", action: "read" },
+      { resource: "users", action: "write" },
+      { resource: "users", action: "delete" },
+      // 咨询师管理
+      { resource: "consultants", action: "read" },
+      { resource: "consultants", action: "write" },
+      { resource: "consultants", action: "approve" },
+      // 顾客管理
+      { resource: "customers", action: "read" },
+      { resource: "customers", action: "write" },
+      // 门店管理
+      { resource: "stores", action: "read" },
+      { resource: "stores", action: "write" },
+      // 经销商管理
+      { resource: "distributors", action: "read" },
+      { resource: "distributors", action: "write" },
+      // 更多权限...
+    ];
+  };
+
+  // 原有的根据角色获取权限逻辑（保持兼容）
+  const getPermissionsByRole = (role: UserRole): Permission[] => {
+    // 保持原有的权限配置逻辑
+    const basePermissions: Record<UserRole, Permission[]> = {
+      headquarters_admin: getAllPermissions(),
+      distributor_admin: [
+        { resource: "customers", action: "read" },
+        { resource: "customers", action: "write" },
+        { resource: "consultants", action: "read" },
+        { resource: "stores", action: "read" },
+        // 更多经销商管理员权限...
+      ],
+      store_admin: [
+        { resource: "customers", action: "read" },
+        { resource: "customers", action: "write" },
+        { resource: "consultants", action: "read" },
+        // 更多门店管理员权限...
+      ],
+      // 其他角色权限...
+      distributor_employee: [],
+      consultant: [],
+      customer: [],
+    };
+
+    return basePermissions[role] || [];
+  };
+
+  // 检查资源权限
+  const hasPermission = (resource: string, action: string): boolean => {
+    return permissions.some(p => p.resource === resource && p.action === action);
+  };
+
+  // 检查字段权限
+  const hasPermissionForFields = (resource: string, action: string, fields: string[]): boolean => {
+    const permission = permissions.find(p => p.resource === resource && p.action === action);
+    if (!permission) return false;
+    if (!permission.fields) return true; // 如果没有字段限制，则允许所有字段
+    return fields.every(field => permission.fields!.includes(field));
+  };
+
+  // 获取可见字段
+  const getVisibleFields = (resource: string): string[] => {
+    const readPermission = permissions.find(p => p.resource === resource && p.action === "read");
+    return readPermission?.fields || [];
+  };
+
+  // OAuth2 权限检查方法
+  const hasAuthority = (authority: string): boolean => {
+    const extendedUser = user as any;
+    return extendedUser?.authorities?.includes(authority) || false;
+  };
+
+  const hasAnyAuthority = (...authorities: string[]): boolean => {
+    return authorities.some(authority => hasAuthority(authority));
+  };
+
+  const isInGroup = (group: string): boolean => {
+    const extendedUser = user as any;
+    if (!extendedUser?.groups) return false;
+    
+    // 支持带或不带 GROUP_ 前缀的组名
+    const groupsToCheck = [group, `GROUP_${group}`];
+    return groupsToCheck.some(g => extendedUser.groups.includes(g));
+  };
+
+  const contextValue: PermissionsContextType = {
+    permissions,
+    hasPermission,
+    hasPermissionForFields,
+    getVisibleFields,
+    hasAuthority,
+    hasAnyAuthority,
+    isInGroup,
+    isLoading,
+  };
+
+  return (
+    <PermissionsContext.Provider value={contextValue}>
+      {children}
+    </PermissionsContext.Provider>
+  );
 }
 
-export default function AuthSessionProvider({ children }: Props) {
-  return <SessionProvider>{children}</SessionProvider>
+// 使用权限上下文的 Hook
+export function usePermissions(): PermissionsContextType {
+  const context = useContext(PermissionsContext);
+  if (!context) {
+    throw new Error('usePermissions must be used within a PermissionsProvider');
+  }
+  return context;
 }
 ```
 
-### 第八步：更新根布局
+### 第八步：创建 API 调用工具
 
-更新 `app/layout.tsx` 文件：
+创建 `lib/api-client-with-auth.ts` 文件，为 API 调用自动添加认证头：
 
 ```typescript
-import type { Metadata } from "next"
-import AuthSessionProvider from "@/components/providers/session-provider"
-import "./globals.css"
+// 扩展现有的 API 工具，添加认证支持
+export class AuthenticatedApiClient {
+  private baseUrl: string;
 
-export const metadata: Metadata = {
-  title: "管理后台",
-  description: "基于 WeSpringAuthServer 的管理后台系统",
+  constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api') {
+    this.baseUrl = baseUrl;
+  }
+
+  // 获取认证头
+  private getAuthHeaders(): HeadersInit {
+    const user = this.getCurrentUser();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+
+    if (user?.accessToken) {
+      headers['Authorization'] = `Bearer ${user.accessToken}`;
+    }
+
+    return headers;
+  }
+
+  // 从 localStorage 获取当前用户
+  private getCurrentUser(): any {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      const userStr = localStorage.getItem('user');
+      return userStr ? JSON.parse(userStr) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // 通用请求方法
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
+    const headers = this.getAuthHeaders();
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...headers,
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // 令牌过期，清除用户信息并重定向到登录页
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        throw new Error('Authentication required');
+      }
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  // GET 请求
+  async get<T>(endpoint: string): Promise<T> {
+    return this.request<T>(endpoint, { method: 'GET' });
+  }
+
+  // POST 请求
+  async post<T>(endpoint: string, data?: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  // PUT 请求
+  async put<T>(endpoint: string, data?: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  // DELETE 请求
+  async delete<T>(endpoint: string): Promise<T> {
+    return this.request<T>(endpoint, { method: 'DELETE' });
+  }
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return (
-    <html lang="zh-CN">
-      <body>
-        <AuthSessionProvider>
-          {children}
-        </AuthSessionProvider>
-      </body>
-    </html>
-  )
-}
+export const authApiClient = new AuthenticatedApiClient();
 ```
 
 ## 🔐 使用认证信息
@@ -824,53 +1682,76 @@ module.exports = nextConfig
 
 ## 🧪 测试集成
 
-### 1. 启动应用
+### 第一步：配置 WeSpringAuthServer Client
+
+在 WeSpringAuthServer 中注册您的应用为 OAuth2 Client：
+
+```sql
+-- 在 WeSpringAuthServer 数据库中执行
+INSERT INTO oauth2_registered_client (
+    id, client_id, client_name, client_secret,
+    authorization_grant_types, redirect_uris, scopes
+) VALUES (
+    'admin-console-client-id',
+    'admin-console-client',
+    'Admin Console',
+    '{bcrypt}$2a$10$password_hash_here',
+    'authorization_code,refresh_token',
+    'http://localhost:3000/auth/callback',
+    'openid,profile,email,authorities,groups'
+);
+```
+
+### 第二步：启动服务
 
 ```bash
+# 1. 启动 WeSpringAuthServer
+cd /path/to/WeSpringAuthServer
+./start.sh
+
+# 2. 启动前端应用
+cd /path/to/RuiChuangQi-AI/src/admin-console
 npm run dev
 ```
 
-### 2. 测试登录流程
+### 第三步：测试认证流程
 
-1. 访问 `http://localhost:3000`
-2. 应该自动重定向到登录页面
-3. 点击登录按钮，跳转到 WeSpringAuthServer
-4. 完成认证后回调到应用
-5. 验证用户信息和权限是否正确加载
+#### 开发环境测试（模拟认证）
+1. 设置 `NEXT_PUBLIC_OAUTH_ENABLED=false`
+2. 访问 `http://localhost:3000`
+3. 使用测试账号登录：`admin/password`
 
-### 3. 测试权限控制
+#### 生产环境测试（OAuth2 认证）
+1. 设置 `NEXT_PUBLIC_OAUTH_ENABLED=true`
+2. 访问 `http://localhost:3000`
+3. 点击"统一认证登录"
+4. 跳转到 WeSpringAuthServer 登录页
+5. 完成认证后自动回跳应用
 
-创建测试页面验证权限控制是否正常工作：
+### 第四步：验证权限系统
+
+在现有页面中验证权限是否正常工作：
 
 ```typescript
-// app/test/permissions/page.tsx
-import PermissionGuard from "@/components/auth/permission-guard"
+// 在任意页面组件中添加权限测试
+import { usePermissions } from '@/contexts/permissions-context'
 
-export default function PermissionsTestPage() {
+export default function TestPermissions() {
+  const { hasAuthority, hasPermission, isInGroup } = usePermissions()
+  
   return (
-    <div className="space-y-4">
-      <h1>权限测试页面</h1>
+    <div className="p-4 space-y-2">
+      <h3>权限测试</h3>
       
-      <PermissionGuard permission="Users_Read">
-        <div className="p-4 bg-green-100 border border-green-400 rounded">
-          ✅ 您有 Users_Read 权限
-        </div>
-      </PermissionGuard>
+      {/* 测试 OAuth2 权限 */}
+      <div>Users_Read: {hasAuthority('Users_Read') ? '✅' : '❌'}</div>
+      <div>ROLE_ADMIN: {hasAuthority('ROLE_ADMIN') ? '✅' : '❌'}</div>
       
-      <PermissionGuard 
-        permission="Users_Read" 
-        fallback={
-          <div className="p-4 bg-red-100 border border-red-400 rounded">
-            ❌ 您没有 Users_Read 权限
-          </div>
-        }
-      />
+      {/* 测试传统权限 */}
+      <div>用户读取: {hasPermission('users', 'read') ? '✅' : '❌'}</div>
       
-      <PermissionGuard role="ROLE_ADMIN">
-        <div className="p-4 bg-blue-100 border border-blue-400 rounded">
-          👑 您是管理员
-        </div>
-      </PermissionGuard>
+      {/* 测试组权限 */}
+      <div>管理员组: {isInGroup('ADMIN_GROUP') ? '✅' : '❌'}</div>
     </div>
   )
 }
@@ -916,4 +1797,89 @@ A: 如果 WeSpringAuthServer 使用 HTTPS 而开发环境使用 HTTP：
 
 ---
 
-🎉 **恭喜！** 您的 Next.js 应用现在已经成功集成了 WeSpringAuthServer 作为 OAuth2 Client！
+## ❓ 常见问题与故障排查
+
+### Q: 环境变量配置问题
+**问题**: OAuth2 登录按钮不显示或认证失败
+
+**解决方案**:
+1. 检查 `.env.local` 文件中的环境变量是否正确设置
+2. 确认 `NEXT_PUBLIC_OAUTH_ENABLED=true`
+3. 验证 WeSpringAuthServer 地址是否可访问
+
+### Q: OAuth2 回调失败
+**问题**: 认证成功但回调页面显示错误
+
+**解决方案**:
+1. 检查 WeSpringAuthServer 中注册的回调 URL 是否匹配
+2. 确认 `OAUTH_CLIENT_ID` 和 `OAUTH_CLIENT_SECRET` 配置正确
+3. 查看浏览器控制台和网络请求是否有错误
+
+### Q: 权限映射不正确
+**问题**: 用户登录成功但权限不生效
+
+**解决方案**:
+1. 检查 OAuth2 scope 是否包含 `authorities` 和 `groups`
+2. 验证 `mapAuthoritiesToPermissions` 函数的映射规则
+3. 确认 WeSpringAuthServer 返回的权限格式
+
+### Q: 令牌过期处理
+**问题**: 用户需要频繁重新登录
+
+**解决方案**:
+1. 检查令牌刷新逻辑是否正常工作
+2. 确认 `refresh_token` 在 localStorage 中正确保存
+3. 验证 WeSpringAuthServer 的令牌过期时间配置
+
+### Q: 开发与生产环境切换
+**问题**: 需要在模拟认证和 OAuth2 认证之间切换
+
+**解决方案**:
+1. 使用环境变量 `NEXT_PUBLIC_OAUTH_ENABLED` 控制
+2. 开发环境设为 `false`，生产环境设为 `true`
+3. 确保两种模式下的用户数据结构兼容
+
+## 🚀 部署指南
+
+### 生产环境配置清单
+
+1. **环境变量设置**:
+   ```bash
+   NEXT_PUBLIC_OAUTH_ENABLED=true
+   NEXT_PUBLIC_WESPRING_AUTH_URL=https://your-auth-server.com
+   OAUTH_CLIENT_SECRET=your-production-secret
+   ```
+
+2. **WeSpringAuthServer 配置**:
+   - 注册生产环境的回调 URL
+   - 配置正确的 CORS 策略
+   - 确保 HTTPS 证书有效
+
+3. **安全检查**:
+   - 客户端密钥不能暴露在前端代码中
+   - 回调 URL 使用 HTTPS
+   - 令牌刷新机制正常工作
+
+## 💡 最佳实践
+
+1. **渐进式迁移**: 先在开发环境测试，再逐步迁移到生产环境
+2. **权限映射**: 建立清晰的 OAuth2 权限到应用权限的映射关系
+3. **错误处理**: 实现完善的认证错误处理和用户提示
+4. **性能优化**: 合理使用权限缓存，避免频繁权限检查
+5. **安全考虑**: 定期更新客户端密钥，监控异常登录行为
+
+## 📋 集成检查清单
+
+- [ ] 环境变量配置完成
+- [ ] OAuth2Service 创建完成
+- [ ] AuthContext 更新完成
+- [ ] 登录页面支持 OAuth2
+- [ ] 回调页面创建完成
+- [ ] 权限上下文更新完成
+- [ ] API 客户端添加认证头
+- [ ] 测试模拟认证功能正常
+- [ ] 测试 OAuth2 认证流程正常
+- [ ] 权限控制验证通过
+- [ ] 令牌刷新机制工作正常
+
+🎉 **恭喜！** 您已完成 OAuth2 Client 集成，现在可以享受统一认证带来的便利！
