@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS登录演示 - WeSpring Auth Server</title>
+    <style>
+        /* 全局样式 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 450px;
+            width: 90%;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+        }
+
+        /* 标题样式 */
+        .title {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+
+        .title h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .title p {
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+
+        /* 登录界面样式 */
+        .login-container {
+            display: none;
+        }
+
+        .login-container.active {
+            display: block;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e1e8ed;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .phone-input-group {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .phone-input-group input {
+            flex: 1;
+        }
+
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: none;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+            min-width: 120px;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #5a6268;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-full {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        /* 业务界面样式 */
+        .business-container {
+            display: none;
+        }
+
+        .business-container.active {
+            display: block;
+        }
+
+        .user-info {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .user-info h3 {
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+
+        .user-info p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .business-actions {
+            display: grid;
+            gap: 15px;
+        }
+
+        .action-card {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .action-card:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+            transform: translateY(-2px);
+        }
+
+        .action-card h4 {
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .action-card p {
+            color: #6c757d;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: #c82333;
+        }
+
+        /* 状态显示 */
+        .status {
+            margin: 15px 0;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #cce7f0;
+            color: #055160;
+            border: 1px solid #b6d4fe;
+        }
+
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 倒计时样式 */
+        .countdown {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        /* Token信息显示 */
+        .token-info {
+            background: #e8f4fd;
+            border: 1px solid #b8daff;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            font-size: 12px;
+            color: #004085;
+        }
+
+        .token-info h5 {
+            margin-bottom: 10px;
+            color: #0056b3;
+        }
+
+        .token-info .token-row {
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+
+        .token-info .token-row strong {
+            display: inline-block;
+            width: 120px;
+            color: #495057;
+        }
+
+        .token-refresh-section {
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .refresh-process {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .refresh-process h6 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 14px;
+        }
+
+        .process-log {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+        }
+
+        .log-timestamp {
+            color: #6c757d;
+            font-weight: normal;
+        }
+
+        .log-info {
+            color: #007bff;
+        }
+
+        .log-success {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .log-error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .log-warning {
+            color: #ffc107;
+        }
+
+        /* 响应式设计 - 全面移动端优化 */
+        
+        /* 平板设备 */
+        @media (max-width: 768px) {
+            .container {
+                max-width: 100%;
+                margin: 10px;
+                padding: 30px 20px;
+            }
+            
+            .business-actions {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-card {
+                padding: 15px;
+            }
+        }
+        
+        /* 移动设备 */
+        @media (max-width: 480px) {
+            body {
+                padding: 0;
+                min-height: 100vh;
+                align-items: flex-start;
+            }
+            
+            .container {
+                max-width: 100%;
+                margin: 5px;
+                padding: 20px 15px;
+                min-height: calc(100vh - 10px);
+                border-radius: 12px;
+            }
+
+            .container:hover {
+                transform: none;
+            }
+
+            /* 标题优化 */
+            .title {
+                margin-bottom: 25px;
+            }
+
+            .title h1 {
+                font-size: 22px;
+                margin-bottom: 6px;
+            }
+
+            .title p {
+                font-size: 13px;
+            }
+
+            /* 输入组优化 */
+            .input-group {
+                margin-bottom: 18px;
+            }
+
+            .input-group label {
+                font-size: 14px;
+                margin-bottom: 6px;
+            }
+
+            .input-group input {
+                padding: 16px 14px;
+                font-size: 16px; /* 防止iOS缩放 */
+                border-radius: 8px;
+            }
+
+            /* 手机号输入组优化 */
+            .phone-input-group {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .phone-input-group .btn-secondary {
+                width: 100%;
+                padding: 16px 20px;
+                font-size: 15px;
+                min-height: 48px; /* iOS建议的最小触摸目标 */
+            }
+
+            /* 按钮优化 */
+            .btn {
+                padding: 16px 20px;
+                font-size: 15px;
+                border-radius: 8px;
+                min-height: 48px;
+                touch-action: manipulation; /* 防止双击缩放 */
+            }
+
+            .btn-full {
+                margin-top: 8px;
+            }
+
+            /* 登出按钮优化 */
+            .logout-btn {
+                top: 15px;
+                right: 15px;
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+            /* 业务界面优化 */
+            .user-info {
+                padding: 18px;
+                margin-bottom: 20px;
+                border-radius: 10px;
+            }
+
+            .user-info h3 {
+                font-size: 18px;
+                margin-bottom: 8px;
+            }
+
+            .user-info p {
+                font-size: 13px;
+                line-height: 1.4;
+            }
+
+            /* 业务卡片优化 */
+            .business-actions {
+                gap: 12px;
+            }
+
+            .action-card {
+                padding: 16px;
+                border-radius: 10px;
+            }
+
+            .action-card h4 {
+                font-size: 15px;
+                margin-bottom: 6px;
+            }
+
+            .action-card p {
+                font-size: 13px;
+                margin-bottom: 10px;
+                line-height: 1.3;
+            }
+
+            .action-card .btn {
+                padding: 10px 16px;
+                font-size: 13px;
+                min-height: auto;
+            }
+
+            /* Token信息区域优化 */
+            .token-info {
+                padding: 12px;
+                margin: 15px 0;
+                font-size: 11px;
+                border-radius: 6px;
+            }
+
+            .token-info h5 {
+                font-size: 13px;
+                margin-bottom: 8px;
+            }
+
+            .token-info .token-row {
+                margin-bottom: 6px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .token-info .token-row strong {
+                width: auto;
+                display: block;
+                font-size: 11px;
+                color: #666;
+            }
+
+            .token-info .token-row span {
+                font-size: 10px;
+                word-break: break-all;
+                color: #333;
+            }
+
+            /* Token刷新按钮优化 */
+            .token-refresh-section {
+                margin: 12px 0;
+            }
+
+            .token-refresh-section .btn {
+                width: 100%;
+                padding: 12px 16px;
+                font-size: 13px;
+            }
+
+            /* 刷新过程日志优化 */
+            .refresh-process {
+                padding: 12px;
+                margin-top: 12px;
+                border-radius: 6px;
+            }
+
+            .refresh-process h6 {
+                font-size: 12px;
+                margin-bottom: 8px;
+            }
+
+            .process-log {
+                font-size: 10px;
+                line-height: 1.3;
+                max-height: 150px;
+                padding: 8px;
+                border-radius: 3px;
+            }
+
+            .log-entry {
+                margin: 1px 0;
+                padding: 1px 0;
+            }
+
+                         /* 状态消息优化 */
+             .status {
+                 font-size: 13px;
+                 padding: 10px 12px;
+                 border-radius: 6px;
+                 margin-top: 10px;
+             }
+
+             /* 加载动画移动端优化 */
+             .loading {
+                 width: 16px;
+                 height: 16px;
+                 border-width: 2px;
+                 margin-right: 6px;
+             }
+        }
+
+        /* 超小屏幕设备 */
+        @media (max-width: 360px) {
+            .container {
+                margin: 2px;
+                padding: 15px 10px;
+            }
+
+            .title h1 {
+                font-size: 20px;
+            }
+
+            .input-group input {
+                padding: 14px 12px;
+            }
+
+            .btn {
+                padding: 14px 16px;
+                font-size: 14px;
+            }
+
+            .token-info {
+                padding: 10px;
+                font-size: 10px;
+            }
+
+            .process-log {
+                font-size: 9px;
+                max-height: 120px;
+            }
+        }
+
+        /* 触摸设备优化 */
+        @media (hover: none) and (pointer: coarse) {
+            .btn:hover:not(:disabled) {
+                transform: none;
+                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+            }
+
+            .action-card:hover {
+                transform: none;
+                border-color: #667eea;
+                background: #f0f4ff;
+            }
+
+            .container:hover {
+                transform: none;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            }
+        }
+
+        /* 动画效果 */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container fade-in">
+        <!-- 登出按钮 -->
+        <button class="logout-btn" id="logoutBtn" style="display: none;" onclick="logout()">登出</button>
+        
+        <!-- 标题 -->
+        <div class="title">
+            <h1>🔐 SMS登录演示</h1>
+            <p>基于WeSpring Auth Server的短信验证码登录</p>
+        </div>
+
+        <!-- 登录界面 -->
+        <div class="login-container active" id="loginContainer">
+            <div class="input-group">
+                <label for="phoneNumber">手机号码</label>
+                <div class="phone-input-group">
+                    <input type="tel" id="phoneNumber" placeholder="请输入手机号码" maxlength="11">
+                    <button class="btn btn-secondary" id="sendCodeBtn" onclick="sendSmsCode()">
+                        <span id="sendCodeText">发送验证码</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label for="verificationCode">验证码</label>
+                <input type="text" id="verificationCode" placeholder="请输入6位验证码" maxlength="6">
+            </div>
+
+            <button class="btn btn-primary btn-full" id="loginBtn" onclick="performLogin()">
+                <span id="loginText">立即登录</span>
+            </button>
+
+            <div id="loginStatus" class="status" style="display: none;"></div>
+        </div>
+
+        <!-- 业务界面 -->
+        <div class="business-container" id="businessContainer">
+            <div class="user-info">
+                <h3>👋 欢迎回来！</h3>
+                <p id="userWelcome">您已成功登录系统</p>
+            </div>
+
+            <div class="business-actions">
+                <div class="action-card" onclick="viewProfile()">
+                    <h4>👤 查看个人资料</h4>
+                    <p>查看和编辑您的个人信息</p>
+                    <button class="btn btn-primary">查看详情</button>
+                </div>
+
+                <div class="action-card" onclick="viewOrders()">
+                    <h4>📋 我的订单</h4>
+                    <p>查看您的历史订单和当前状态</p>
+                    <button class="btn btn-primary">查看订单</button>
+                </div>
+
+                <div class="action-card" onclick="viewSettings()">
+                    <h4>⚙️ 系统设置</h4>
+                    <p>个性化设置和偏好配置</p>
+                    <button class="btn btn-primary">进入设置</button>
+                </div>
+
+                <div class="action-card" onclick="viewApiTest()">
+                    <h4>🔧 API测试</h4>
+                    <p>测试受保护的API接口</p>
+                    <button class="btn btn-primary">测试API</button>
+                </div>
+            </div>
+
+            <!-- Token信息显示 -->
+            <div class="token-info">
+                <h5>🔑 当前Token信息</h5>
+                <div class="token-row">
+                    <strong>Access Token:</strong>
+                    <span id="accessTokenDisplay">未获取</span>
+                </div>
+                <div class="token-row">
+                    <strong>过期时间:</strong>
+                    <span id="tokenExpiryDisplay">未知</span>
+                </div>
+                <div class="token-row">
+                    <strong>自动刷新:</strong>
+                    <span id="autoRefreshStatus">已启用</span>
+                </div>
+                
+                <!-- 手动刷新Token按钮 -->
+                <div class="token-refresh-section">
+                    <button class="btn btn-secondary" id="manualRefreshBtn" onclick="manualRefreshToken()">
+                        <span id="refreshBtnText">🔄 手动刷新Token</span>
+                    </button>
+                </div>
+                
+                <!-- Token刷新过程显示 -->
+                <div class="refresh-process" id="refreshProcess" style="display: none;">
+                    <h6>🔄 Token刷新过程</h6>
+                    <div class="process-log" id="processLog">
+                        <!-- 动态内容 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 配置常量
+        const CONFIG = {
+            AUTH_SERVER_BASE_URL: 'http://localhost:9000',
+            CLIENT_ID: 'ffv-client',
+            CLIENT_SECRET: 'secret',
+            STORAGE_KEYS: {
+                ACCESS_TOKEN: 'sms_access_token',
+                REFRESH_TOKEN: 'sms_refresh_token',
+                TOKEN_EXPIRY: 'sms_token_expiry',
+                USER_INFO: 'sms_user_info'
+            }
+        };
+
+        // Token管理器
+        class TokenManager {
+            constructor() {
+                this.autoRefreshTimer = null;
+                this.setupAutoRefresh();
+            }
+
+            // 存储token
+            storeTokens(accessToken, refreshToken, expiresIn) {
+                const now = new Date().getTime();
+                const expiryTime = now + (expiresIn * 1000);
+                
+                localStorage.setItem(CONFIG.STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+                localStorage.setItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+                localStorage.setItem(CONFIG.STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+                
+                this.setupAutoRefresh();
+                this.updateTokenDisplay();
+                
+                console.log('Tokens stored successfully', {
+                    expiresIn: expiresIn,
+                    expiryTime: new Date(expiryTime)
+                });
+            }
+
+            // 获取access token
+            getAccessToken() {
+                return localStorage.getItem(CONFIG.STORAGE_KEYS.ACCESS_TOKEN);
+            }
+
+            // 获取refresh token
+            getRefreshToken() {
+                return localStorage.getItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
+            }
+
+            // 检查token是否有效
+            isTokenValid() {
+                const token = this.getAccessToken();
+                const expiry = localStorage.getItem(CONFIG.STORAGE_KEYS.TOKEN_EXPIRY);
+                
+                if (!token || !expiry) {
+                    return false;
+                }
+
+                const now = new Date().getTime();
+                const expiryTime = parseInt(expiry);
+                
+                // 提前5分钟认为token将要过期
+                return now < (expiryTime - 5 * 60 * 1000);
+            }
+
+            // 清除token
+            clearTokens() {
+                localStorage.removeItem(CONFIG.STORAGE_KEYS.ACCESS_TOKEN);
+                localStorage.removeItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
+                localStorage.removeItem(CONFIG.STORAGE_KEYS.TOKEN_EXPIRY);
+                localStorage.removeItem(CONFIG.STORAGE_KEYS.USER_INFO);
+                
+                if (this.autoRefreshTimer) {
+                    clearTimeout(this.autoRefreshTimer);
+                }
+                
+                this.updateTokenDisplay();
+            }
+
+            // 刷新token
+            async refreshToken() {
+                const refreshToken = this.getRefreshToken();
+                if (!refreshToken) {
+                    throw new Error('No refresh token available');
+                }
+
+                try {
+                    const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/refresh-token`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams({
+                            grant_type: 'refresh_token',
+                            refresh_token: refreshToken,
+                            client_id: CONFIG.CLIENT_ID,
+                            client_secret: CONFIG.CLIENT_SECRET
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error_description || 'Token refresh failed');
+                    }
+
+                    const data = await response.json();
+                    this.storeTokens(data.access_token, data.refresh_token, data.expires_in);
+                    
+                    console.log('Token refreshed successfully');
+                    return data.access_token;
+                } catch (error) {
+                    console.error('Token refresh failed:', error);
+                    this.clearTokens();
+                    throw error;
+                }
+            }
+
+            // 手动刷新token（带详细过程显示）
+            async refreshTokenWithProcess() {
+                return new Promise(async (resolve, reject) => {
+                    const logContainer = document.getElementById('processLog');
+                    const refreshProcess = document.getElementById('refreshProcess');
+                    
+                    // 清空日志并显示容器
+                    logContainer.innerHTML = '';
+                    refreshProcess.style.display = 'block';
+                    refreshProcess.scrollIntoView({ behavior: 'smooth' });
+
+                    const addLog = (message, type = 'info') => {
+                        const timestamp = new Date().toLocaleTimeString('zh-CN');
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+                        logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="log-${type}">${message}</span>`;
+                        logContainer.appendChild(logEntry);
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    };
+
+                    try {
+                        addLog('🔄 开始手动刷新Token过程...', 'info');
+                        
+                        // 检查refresh token
+                        const refreshToken = this.getRefreshToken();
+                        if (!refreshToken) {
+                            addLog('❌ 错误：未找到refresh token', 'error');
+                            reject(new Error('No refresh token available'));
+                            return;
+                        }
+                        
+                        addLog(`✅ 找到refresh token: ${refreshToken.substring(0, 20)}...`, 'info');
+                        addLog('📤 正在发送刷新请求到认证服务器...', 'info');
+
+                        // 模拟网络延迟以便观察过程
+                        await new Promise(resolve => setTimeout(resolve, 500));
+
+                        const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/refresh-token`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: new URLSearchParams({
+                                grant_type: 'refresh_token',
+                                refresh_token: refreshToken,
+                                client_id: CONFIG.CLIENT_ID,
+                                client_secret: CONFIG.CLIENT_SECRET
+                            })
+                        });
+
+                        addLog(`📥 收到服务器响应，状态码: ${response.status}`, 'info');
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            const errorMsg = errorData.error_description || 'Token refresh failed';
+                            addLog(`❌ 刷新失败: ${errorMsg}`, 'error');
+                            reject(new Error(errorMsg));
+                            return;
+                        }
+
+                        const data = await response.json();
+                        addLog('✅ 成功解析响应数据', 'success');
+                        addLog(`🔑 新的Access Token: ${data.access_token.substring(0, 30)}...`, 'info');
+                        addLog(`🔑 新的Refresh Token: ${data.refresh_token.substring(0, 30)}...`, 'info');
+                        addLog(`⏰ Token有效期: ${data.expires_in}秒`, 'info');
+
+                        // 存储新的tokens
+                        this.storeTokens(data.access_token, data.refresh_token, data.expires_in);
+                        addLog('💾 新Token已保存到本地存储', 'success');
+                        
+                        // 更新显示
+                        this.updateTokenDisplay();
+                        addLog('🎉 Token刷新完成！页面信息已更新', 'success');
+                        
+                        console.log('Manual token refresh completed successfully');
+                        resolve(data.access_token);
+
+                    } catch (error) {
+                        addLog(`❌ 网络错误: ${error.message}`, 'error');
+                        console.error('Manual token refresh failed:', error);
+                        this.clearTokens();
+                        reject(error);
+                    }
+                });
+            }
+
+            // 设置自动刷新
+            setupAutoRefresh() {
+                if (this.autoRefreshTimer) {
+                    clearTimeout(this.autoRefreshTimer);
+                }
+
+                const expiry = localStorage.getItem(CONFIG.STORAGE_KEYS.TOKEN_EXPIRY);
+                if (!expiry) return;
+
+                const now = new Date().getTime();
+                const expiryTime = parseInt(expiry);
+                
+                // 提前10分钟刷新token
+                const refreshTime = expiryTime - now - (10 * 60 * 1000);
+                
+                if (refreshTime > 0) {
+                    this.autoRefreshTimer = setTimeout(async () => {
+                        try {
+                            await this.refreshToken();
+                            showStatus('Token已自动刷新', 'success');
+                        } catch (error) {
+                            showStatus('Token自动刷新失败，请重新登录', 'error');
+                            showLoginForm();
+                        }
+                    }, refreshTime);
+                    
+                    console.log(`Auto refresh scheduled in ${Math.round(refreshTime / 1000 / 60)} minutes`);
+                }
+            }
+
+            // 更新token显示
+            updateTokenDisplay() {
+                const accessToken = this.getAccessToken();
+                const expiry = localStorage.getItem(CONFIG.STORAGE_KEYS.TOKEN_EXPIRY);
+                
+                const accessTokenDisplay = document.getElementById('accessTokenDisplay');
+                const tokenExpiryDisplay = document.getElementById('tokenExpiryDisplay');
+                
+                if (accessToken && accessTokenDisplay) {
+                    accessTokenDisplay.textContent = accessToken.substring(0, 20) + '...';
+                }
+                
+                if (expiry && tokenExpiryDisplay) {
+                    const expiryDate = new Date(parseInt(expiry));
+                    tokenExpiryDisplay.textContent = expiryDate.toLocaleString('zh-CN');
+                }
+            }
+        }
+
+        // SMS登录管理器
+        class SmsLoginManager {
+            constructor(tokenManager) {
+                this.tokenManager = tokenManager;
+                this.sendCodeCooldown = 0;
+                this.cooldownTimer = null;
+            }
+
+            // 发送验证码
+            async sendVerificationCode(phoneNumber) {
+                if (this.sendCodeCooldown > 0) {
+                    showStatus(`请等待 ${this.sendCodeCooldown} 秒后重试`, 'error');
+                    return false;
+                }
+
+                if (!this.validatePhoneNumber(phoneNumber)) {
+                    showStatus('请输入正确的手机号码', 'error');
+                    return false;
+                }
+
+                try {
+                    showLoading('sendCodeBtn', '发送中...');
+
+                    const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/send-code`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            phoneNumber: phoneNumber
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showStatus('验证码发送成功，请查收短信', 'success');
+                        this.startCooldown();
+                        return true;
+                    } else {
+                        showStatus(`发送失败: ${data.message}`, 'error');
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('Send SMS error:', error);
+                    showStatus('发送验证码时发生错误，请重试', 'error');
+                    return false;
+                } finally {
+                    hideLoading('sendCodeBtn', '发送验证码');
+                }
+            }
+
+            // 执行登录
+            async performLogin(phoneNumber, verificationCode) {
+                if (!this.validatePhoneNumber(phoneNumber)) {
+                    showStatus('请输入正确的手机号码', 'error');
+                    return false;
+                }
+
+                if (!this.validateVerificationCode(verificationCode)) {
+                    showStatus('请输入6位验证码', 'error');
+                    return false;
+                }
+
+                try {
+                    showLoading('loginBtn', '登录中...');
+
+                    const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/auth?` + new URLSearchParams({
+                        mobileNumber: phoneNumber,
+                        verificationCode: verificationCode,
+                        clientId: CONFIG.CLIENT_ID
+                    }), {
+                        method: 'GET'
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        // 存储token
+                        this.tokenManager.storeTokens(data.access_token, data.refresh_token, data.expires_in);
+                        
+                        // 存储用户信息
+                        localStorage.setItem(CONFIG.STORAGE_KEYS.USER_INFO, JSON.stringify({
+                            phoneNumber: phoneNumber,
+                            loginTime: new Date().toISOString()
+                        }));
+
+                        showStatus('登录成功！', 'success');
+                        
+                        setTimeout(() => {
+                            showBusinessInterface();
+                        }, 1000);
+                        
+                        return true;
+                    } else {
+                        const errorData = await response.json();
+                        showStatus(`登录失败: ${errorData.error_description || '验证码错误'}`, 'error');
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    showStatus('登录时发生错误，请重试', 'error');
+                    return false;
+                } finally {
+                    hideLoading('loginBtn', '立即登录');
+                }
+            }
+
+            // 验证手机号
+            validatePhoneNumber(phoneNumber) {
+                const phoneRegex = /^1[3-9]\d{9}$/;
+                return phoneRegex.test(phoneNumber);
+            }
+
+            // 验证验证码
+            validateVerificationCode(code) {
+                return code && code.length === 6 && /^\d{6}$/.test(code);
+            }
+
+            // 开始倒计时
+            startCooldown() {
+                this.sendCodeCooldown = 60;
+                this.updateCooldownDisplay();
+
+                this.cooldownTimer = setInterval(() => {
+                    this.sendCodeCooldown--;
+                    if (this.sendCodeCooldown <= 0) {
+                        clearInterval(this.cooldownTimer);
+                        this.resetCooldownDisplay();
+                    } else {
+                        this.updateCooldownDisplay();
+                    }
+                }, 1000);
+            }
+
+            // 更新倒计时显示
+            updateCooldownDisplay() {
+                const sendCodeBtn = document.getElementById('sendCodeBtn');
+                const sendCodeText = document.getElementById('sendCodeText');
+                
+                sendCodeBtn.disabled = true;
+                sendCodeText.innerHTML = `<span class="countdown">${this.sendCodeCooldown}s</span>`;
+            }
+
+            // 重置倒计时显示
+            resetCooldownDisplay() {
+                const sendCodeBtn = document.getElementById('sendCodeBtn');
+                const sendCodeText = document.getElementById('sendCodeText');
+                
+                sendCodeBtn.disabled = false;
+                sendCodeText.textContent = '发送验证码';
+            }
+        }
+
+        // 全局实例
+        const tokenManager = new TokenManager();
+        const smsLoginManager = new SmsLoginManager(tokenManager);
+
+        // 页面加载时检查登录状态
+        document.addEventListener('DOMContentLoaded', function() {
+            checkLoginStatus();
+            
+            // 添加回车键登录支持
+            document.getElementById('verificationCode').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    performLogin();
+                }
+            });
+            
+            document.getElementById('phoneNumber').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendSmsCode();
+                }
+            });
+        });
+
+        // 检查登录状态
+        async function checkLoginStatus() {
+            if (tokenManager.isTokenValid()) {
+                showBusinessInterface();
+            } else {
+                const refreshToken = tokenManager.getRefreshToken();
+                if (refreshToken) {
+                    try {
+                        await tokenManager.refreshToken();
+                        showBusinessInterface();
+                    } catch (error) {
+                        tokenManager.clearTokens();
+                        showLoginForm();
+                    }
+                } else {
+                    showLoginForm();
+                }
+            }
+        }
+
+        // 发送短信验证码
+        async function sendSmsCode() {
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            await smsLoginManager.sendVerificationCode(phoneNumber);
+        }
+
+        // 执行登录
+        async function performLogin() {
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            const verificationCode = document.getElementById('verificationCode').value.trim();
+            
+            await smsLoginManager.performLogin(phoneNumber, verificationCode);
+        }
+
+        // 登出
+        function logout() {
+            tokenManager.clearTokens();
+            showStatus('已成功登出', 'info');
+            setTimeout(() => {
+                showLoginForm();
+            }, 1000);
+        }
+
+        // 显示登录界面
+        function showLoginForm() {
+            document.getElementById('loginContainer').classList.add('active');
+            document.getElementById('businessContainer').classList.remove('active');
+            document.getElementById('logoutBtn').style.display = 'none';
+            clearForm();
+        }
+
+        // 显示业务界面
+        function showBusinessInterface() {
+            document.getElementById('loginContainer').classList.remove('active');
+            document.getElementById('businessContainer').classList.add('active');
+            document.getElementById('logoutBtn').style.display = 'block';
+            
+            // 更新用户欢迎信息
+            updateUserWelcome();
+            tokenManager.updateTokenDisplay();
+        }
+
+        // 更新用户欢迎信息
+        function updateUserWelcome() {
+            const userInfo = localStorage.getItem(CONFIG.STORAGE_KEYS.USER_INFO);
+            if (userInfo) {
+                const info = JSON.parse(userInfo);
+                const welcomeElement = document.getElementById('userWelcome');
+                welcomeElement.textContent = `手机号: ${info.phoneNumber} | 登录时间: ${new Date(info.loginTime).toLocaleString('zh-CN')}`;
+            }
+        }
+
+        // 清空表单
+        function clearForm() {
+            document.getElementById('phoneNumber').value = '';
+            document.getElementById('verificationCode').value = '';
+            hideStatus();
+        }
+
+        // 业务功能演示
+        async function viewProfile() {
+            const result = await makeAuthenticatedRequest('/api/user/profile');
+            if (result.success) {
+                alert('个人资料加载成功！\n\n这里会显示用户的详细信息。');
+            }
+        }
+
+        async function viewOrders() {
+            const result = await makeAuthenticatedRequest('/api/user/orders');
+            if (result.success) {
+                alert('订单信息加载成功！\n\n这里会显示用户的订单列表。');
+            }
+        }
+
+        async function viewSettings() {
+            alert('系统设置\n\n这里可以配置各种个人偏好设置。');
+        }
+
+        async function viewApiTest() {
+            const token = tokenManager.getAccessToken();
+            const message = `API测试信息：\n\n` +
+                           `当前Access Token: ${token ? token.substring(0, 50) + '...' : '无'}\n` +
+                           `Token状态: ${tokenManager.isTokenValid() ? '有效' : '无效或即将过期'}\n` +
+                           `自动刷新: 已启用\n\n` +
+                           `您可以使用此token调用受保护的API接口。`;
+            alert(message);
+        }
+
+        // 发起受保护的API请求
+        async function makeAuthenticatedRequest(endpoint) {
+            try {
+                let token = tokenManager.getAccessToken();
+                
+                // 如果token无效，先尝试刷新
+                if (!tokenManager.isTokenValid()) {
+                    try {
+                        token = await tokenManager.refreshToken();
+                    } catch (error) {
+                        showStatus('Token已过期，请重新登录', 'error');
+                        showLoginForm();
+                        return { success: false, error: 'Token expired' };
+                    }
+                }
+
+                const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}${endpoint}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.status === 401) {
+                    // Token可能已失效，尝试刷新
+                    try {
+                        token = await tokenManager.refreshToken();
+                        // 重新发起请求
+                        const retryResponse = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}${endpoint}`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (retryResponse.ok) {
+                            return { success: true, data: await retryResponse.json() };
+                        }
+                    } catch (refreshError) {
+                        showStatus('认证失败，请重新登录', 'error');
+                        showLoginForm();
+                        return { success: false, error: 'Authentication failed' };
+                    }
+                }
+
+                if (response.ok) {
+                    return { success: true, data: await response.json() };
+                } else {
+                    return { success: false, error: await response.text() };
+                }
+            } catch (error) {
+                console.error('API request error:', error);
+                showStatus('API请求失败', 'error');
+                return { success: false, error: error.message };
+            }
+        }
+
+        // 工具函数
+        function showStatus(message, type = 'info') {
+            const statusElement = document.getElementById('loginStatus');
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+            statusElement.style.display = 'block';
+            
+            // 3秒后自动隐藏成功消息
+            if (type === 'success') {
+                setTimeout(() => {
+                    hideStatus();
+                }, 3000);
+            }
+        }
+
+        function hideStatus() {
+            const statusElement = document.getElementById('loginStatus');
+            statusElement.style.display = 'none';
+        }
+
+        function showLoading(buttonId, loadingText) {
+            const button = document.getElementById(buttonId);
+            const textElement = button.querySelector('span');
+            
+            button.disabled = true;
+            textElement.innerHTML = `<span class="loading"></span>${loadingText}`;
+        }
+
+        function hideLoading(buttonId, originalText) {
+            const button = document.getElementById(buttonId);
+            const textElement = button.querySelector('span');
+            
+            button.disabled = false;
+            textElement.textContent = originalText;
+        }
+
+        // 手动刷新Token功能
+        async function manualRefreshToken() {
+            const refreshBtn = document.getElementById('manualRefreshBtn');
+            const refreshBtnText = document.getElementById('refreshBtnText');
+            const originalText = refreshBtnText.textContent;
+
+            try {
+                // 检查是否已登录
+                if (!tokenManager.getRefreshToken()) {
+                    showStatus('请先登录后再尝试刷新Token', 'warning');
+                    return;
+                }
+
+                // 显示加载状态
+                refreshBtn.disabled = true;
+                refreshBtnText.innerHTML = '<span class="loading"></span>正在刷新...';
+
+                // 执行刷新
+                await tokenManager.refreshTokenWithProcess();
+                
+                // 显示成功状态
+                showStatus('Token刷新成功！', 'success');
+                
+            } catch (error) {
+                // 显示错误状态
+                showStatus(`Token刷新失败: ${error.message}`, 'error');
+                
+                // 如果是认证错误，跳转回登录页面
+                if (error.message.includes('refresh token') || error.message.includes('expired')) {
+                    setTimeout(() => {
+                        showLoginForm();
+                    }, 2000);
+                }
+            } finally {
+                // 恢复按钮状态
+                refreshBtn.disabled = false;
+                refreshBtnText.textContent = originalText;
+            }
+        }
+    </script>
+</body>
+</html>

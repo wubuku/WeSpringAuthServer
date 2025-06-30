@@ -1,0 +1,30 @@
+{
+  "name": "sms-login-demo",
+  "version": "1.0.0",
+  "description": "SMS Login Demo for WeSpring Auth Server",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve -s . -p 8080",
+    "dev": "serve -s . -p 8080 --live",
+    "serve": "python3 -m http.server 8080"
+  },
+  "keywords": [
+    "sms",
+    "login",
+    "oauth2",
+    "authentication",
+    "demo"
+  ],
+  "author": "WeSpring Auth Server Team",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/WeSpringAuthServer"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
