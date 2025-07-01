@@ -29,6 +29,9 @@ public class WeChatService {
     private static final String WECHAT_MOBILE_TYPE = "WECHAT_MOBILE_NUMBER";
     private static final String USERNAME_PREFIX = "wx_";
     private static final int USERNAME_SUFFIX_LENGTH = 20; // Increased from 10 to 20 for better uniqueness
+    
+    // Import MV_PREFIX from DatabaseSmsVerificationService for consistency
+    private static final String MV_PREFIX = DatabaseSmsVerificationService.MV_PREFIX;
 
     // Error messages
     private static final String ERROR_SESSION_INFO = "Failed to get WeChat session info:";
@@ -55,6 +58,19 @@ public class WeChatService {
      */
     @Transactional
     public CustomUserDetails processWeChatLogin(String loginCode, String mobileCode) {
+        return processWeChatLogin(loginCode, mobileCode, null);
+    }
+
+    /**
+     * Process WeChat login with referrer support
+     *
+     * @param loginCode  The authorization code from WeChat
+     * @param mobileCode The mobile authorization code from WeChat
+     * @param referrerId The referrer ID for promotion scenarios
+     * @return The authenticated user
+     */
+    @Transactional
+    public CustomUserDetails processWeChatLogin(String loginCode, String mobileCode, String referrerId) {
         try {
             // Get session info from WeChat
             WxMaJscode2SessionResult sessionResult = getWeChatSessionInfo(loginCode);
@@ -64,10 +80,11 @@ public class WeChatService {
             String openId = validateAndExtractOpenId(sessionResult);
             String unionId = sessionResult.getUnionid();
 
-            logger.debug("Processing WeChat login: OpenID={}, UnionID={}", openId, unionId);
+            logger.debug("Processing WeChat login: OpenID={}, UnionID={}, mobileNumber={}, referrerId={}", 
+                        openId, unionId, mobileNumber, referrerId);
 
             // Find or create user
-            String username = findOrCreateUser(openId, unionId, mobileNumber);
+            String username = findOrCreateUser(openId, unionId, mobileNumber, referrerId);
 
             return userService.getUserDetails(username);
         } catch (Exception e) {
@@ -117,7 +134,7 @@ public class WeChatService {
     /**
      * Find existing user or create new user
      */
-    private String findOrCreateUser(String openId, String unionId, String mobileNumber) {
+    private String findOrCreateUser(String openId, String unionId, String mobileNumber, String referrerId) {
         OffsetDateTime now = OffsetDateTime.now();
 
         // 1. Try to find user by UnionID first
@@ -128,9 +145,30 @@ public class WeChatService {
             username = findUserByOpenId(openId);
         }
 
-        // 3. If still not found, create new user
+        // 3. If still not found and mobile number is available, check for existing MOBILE_NUMBER_TYPE user
+        if (username == null && mobileNumber != null && !mobileNumber.isEmpty()) {
+            Optional<String> mobileUsername = userIdentificationService.findUsernameByIdentifier("MOBILE_NUMBER", mobileNumber);
+            if (mobileUsername.isPresent()) {
+                username = mobileUsername.get();
+                logger.info("Found existing user with MOBILE_NUMBER_TYPE: {}, binding WeChat identifications", username);
+                
+                // Add WeChat identifications to this user
+                userIdentificationService.addUserIdentification(username, WECHAT_OPENID_TYPE, openId, true, now);
+                
+                if (unionId != null && !unionId.isEmpty()) {
+                    userIdentificationService.addUserIdentification(username, WECHAT_UNIONID_TYPE, unionId, true, now);
+                }
+                
+                // Also add WECHAT_MOBILE_TYPE identification
+                userIdentificationService.addUserIdentification(username, WECHAT_MOBILE_TYPE, mobileNumber, true, now);
+                
+                return username;
+            }
+        }
+
+        // 4. If still not found, create new user
         if (username == null) {
-            username = createNewWeChatUser(unionId, openId, mobileNumber, now);
+            username = createNewWeChatUser(unionId, openId, mobileNumber, referrerId, now);
         }
 
         return username;
@@ -208,15 +246,17 @@ public class WeChatService {
      * @param unionId      The union ID from WeChat
      * @param openId       The OpenID from WeChat
      * @param mobileNumber The mobile number from WeChat
+     * @param referrerId   The referrer ID for promotion scenarios
      * @param now          Current timestamp
      * @return The username
      */
-    private String createNewWeChatUser(String unionId, String openId, String mobileNumber, OffsetDateTime now) {
-        // Generate a random username and password
-        String username = USERNAME_PREFIX + UUID.randomUUID().toString().replace("-", "").substring(0, USERNAME_SUFFIX_LENGTH);
+    private String createNewWeChatUser(String unionId, String openId, String mobileNumber, String referrerId, OffsetDateTime now) {
+        // Generate username with preference for readable format (MV_ + mobile number)
+        String username = generateReadableUsername(mobileNumber);
         String password = UUID.randomUUID().toString();
 
-        logger.info("Creating new WeChat user: username={}, OpenID={}, UnionID={}", username, openId, unionId);
+        logger.info("Creating new WeChat user: username={}, OpenID={}, UnionID={}, mobileNumber={}, referrerId={}", 
+                   username, openId, unionId, mobileNumber, referrerId);
 
         // Create the user
         UserDto userDto = new UserDto();
@@ -224,8 +264,8 @@ public class WeChatService {
         userDto.setMobileNumber(mobileNumber);
         userDto.setEnabled(true);
 
-        // Create the user in the database
-        userService.createUser(userDto, password);
+        // Create the user in the database with referrer support
+        userService.createUser(userDto, password, referrerId);
 
         // Link the WeChat OpenID to the user
         userIdentificationService.addUserIdentification(username, WECHAT_OPENID_TYPE, openId, true, now);
@@ -244,6 +284,30 @@ public class WeChatService {
         }
 
         return username;
+    }
+
+    /**
+     * Generate readable username using MV_ prefix + mobile number if available
+     * Falls back to wx_ + random string for users without mobile number
+     */
+    private String generateReadableUsername(String mobileNumber) {
+        // If mobile number is available, use MV_ prefix for consistency
+        if (mobileNumber != null && !mobileNumber.isEmpty()) {
+            String preferredUsername = MV_PREFIX + mobileNumber;
+            
+            // Check if preferred username is available
+            if (!userService.userExists(preferredUsername)) {
+                return preferredUsername;
+            }
+            
+            // Fallback to random username if preferred one is taken
+            String randomUsername = MV_PREFIX + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+            logger.warn("Preferred username {} already exists, using random username: {}", preferredUsername, randomUsername);
+            return randomUsername;
+        } else {
+            // For users without mobile number, use wx_ prefix
+            return USERNAME_PREFIX + UUID.randomUUID().toString().replace("-", "").substring(0, USERNAME_SUFFIX_LENGTH);
+        }
     }
 
 } 

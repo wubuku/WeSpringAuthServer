@@ -188,6 +188,19 @@ public class UserService {
      */
     @Transactional
     public String createUser(UserDto userDto, String password) {
+        return createUser(userDto, password, null);
+    }
+
+    /**
+     * Create a new user for social login (WeChat or SMS) with referrer support
+     *
+     * @param userDto   The user information
+     * @param password  The password (will be encoded)
+     * @param referrerId The referrer ID for promotion scenarios
+     * @return The created user's username
+     */
+    @Transactional
+    public String createUser(UserDto userDto, String password, String referrerId) {
         String username = userDto.getUsername();
         if (userExists(username)) {
             throw new BusinessException("User already exists: " + username);
@@ -196,20 +209,20 @@ public class UserService {
         String encodedPassword = passwordEncoder.encode(password);
         OffsetDateTime now = OffsetDateTime.now();
 
-        // Insert new user
+        // Insert new user with referrer_id support
         jdbcTemplate.update("""
                         INSERT INTO users (
                             username, password, enabled, password_change_required, 
                             first_login, temp_password_last_generated, first_name, last_name,
-                            email, mobile_number, profile_image_url, created_at, updated_at
-                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            email, mobile_number, profile_image_url, referrer_id, created_at, updated_at
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         """,
                 username, encodedPassword,
                 userDto.getEnabled() != null ? userDto.getEnabled() : true,
                 false, false, now,
                 userDto.getFirstName(), userDto.getLastName(),
                 userDto.getEmail(), userDto.getMobileNumber(),
-                userDto.getProfileImageUrl(), now, now);
+                userDto.getProfileImageUrl(), referrerId, now, now);
 
         // Assign default group (USER_GROUP)
         jdbcTemplate.update("""
@@ -220,7 +233,7 @@ public class UserService {
         return username;
     }
 
-    private boolean userExists(String username) {
+    public boolean userExists(String username) {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users WHERE username = ?", Integer.class, username);
         return count > 0;
     }

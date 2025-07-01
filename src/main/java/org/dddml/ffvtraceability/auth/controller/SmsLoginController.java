@@ -184,9 +184,10 @@ public class SmsLoginController {
     public void smsAuth(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
                         @RequestParam("mobileNumber") String mobileNumber,
                         @RequestParam("verificationCode") String verificationCode,
+                        @RequestParam(value = "referrerId", required = false) String referrerId,
                         HttpServletResponse response) throws IOException {
         try {
-            CustomUserDetails userDetails = smsVerificationService.processSmsLogin(mobileNumber, verificationCode);
+            CustomUserDetails userDetails = smsVerificationService.processSmsLogin(mobileNumber, verificationCode, referrerId);
             Authentication authentication = oAuth2TokenService.createAuthentication(userDetails);
             RegisteredClient registeredClient = getRegisteredClient(clientId);
 
@@ -208,9 +209,10 @@ public class SmsLoginController {
     public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
                          @RequestParam("mobileNumber") String mobileNumber,
                          @RequestParam("verificationCode") String verificationCode,
+                         @RequestParam(value = "referrerId", required = false) String referrerId,
                          HttpServletResponse response) throws IOException {
         // 直接调用 smsAuth 方法，保持完全相同的逻辑
-        smsAuth(clientId, mobileNumber, verificationCode, response);
+        smsAuth(clientId, mobileNumber, verificationCode, referrerId, response);
     }
 
     /**

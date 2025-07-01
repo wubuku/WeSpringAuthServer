@@ -27,8 +27,24 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ DEFAULT NULL,
     updated_by VARCHAR(50) DEFAULT NULL,
     updated_at TIMESTAMPTZ DEFAULT NULL,
+    referrer_id VARCHAR(255) DEFAULT NULL,
     PRIMARY KEY (username)
 );
+
+-- Check and add referrer_id column if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name = 'referrer_id'
+    ) THEN
+        ALTER TABLE users ADD COLUMN referrer_id VARCHAR(255) DEFAULT NULL;
+    END IF;
+END $$;
+
+-- Referrer ID field added to support promotion scenarios
+
+
 
 CREATE TABLE IF NOT EXISTS authorities (
     username VARCHAR(50) NOT NULL,

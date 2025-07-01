@@ -29,6 +29,16 @@ public interface SmsVerificationService {
     CustomUserDetails processSmsLogin(String phoneNumber, String code);
 
     /**
+     * Process SMS login with referrer support
+     *
+     * @param phoneNumber The phone number
+     * @param code        The verification code
+     * @param referrerId  The referrer ID for promotion scenarios (optional)
+     * @return The authenticated user details
+     */
+    CustomUserDetails processSmsLogin(String phoneNumber, String code, String referrerId);
+
+    /**
      * Check rate limits for sending SMS to a phone number
      *
      * @param phoneNumber The phone number

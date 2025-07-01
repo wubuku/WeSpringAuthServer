@@ -96,12 +96,17 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
 
     @Transactional
     public CustomUserDetails processSmsLogin(String phoneNumber, String code) {
+        return processSmsLogin(phoneNumber, code, null);
+    }
+
+    @Transactional
+    public CustomUserDetails processSmsLogin(String phoneNumber, String code, String referrerId) {
         if (!verifyCode(phoneNumber, code)) {
             logger.debug("Failed to verify SMS code for phone number: {}", phoneNumber);
             throw new BadCredentialsException("Invalid verification code");
         }
 
-        String username = findOrCreateUserByMobileNumber(phoneNumber);
+        String username = findOrCreateUserByMobileNumber(phoneNumber, referrerId);
         return userService.getUserDetails(username);
     }
 
@@ -109,20 +114,53 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
      * Find existing user by mobile number or create new user
      */
     private String findOrCreateUserByMobileNumber(String mobileNumber) {
+        return findOrCreateUserByMobileNumber(mobileNumber, null);
+    }
+
+    /**
+     * Find existing user by mobile number or create new user with referrer support
+     */
+    private String findOrCreateUserByMobileNumber(String mobileNumber, String referrerId) {
+        // 1. First check for existing MOBILE_NUMBER_TYPE identification
         Optional<String> existingUsername = userIdentificationService.findUsernameByIdentifier(MOBILE_NUMBER_TYPE, mobileNumber);
-        return existingUsername.orElseGet(() -> createUserByMobileNumber(mobileNumber));
+        if (existingUsername.isPresent()) {
+            logger.debug("Found existing user with MOBILE_NUMBER_TYPE: {}", existingUsername.get());
+            return existingUsername.get();
+        }
+
+        // 2. Check for existing WECHAT_MOBILE_TYPE identification and bind to it
+        Optional<String> wechatUsername = userIdentificationService.findUsernameByIdentifier("WECHAT_MOBILE_NUMBER", mobileNumber);
+        if (wechatUsername.isPresent()) {
+            String username = wechatUsername.get();
+            logger.info("Found existing user with WECHAT_MOBILE_TYPE: {}, binding MOBILE_NUMBER_TYPE", username);
+            
+            // Add MOBILE_NUMBER_TYPE identification to this user
+            OffsetDateTime now = OffsetDateTime.now();
+            userIdentificationService.addUserIdentification(username, MOBILE_NUMBER_TYPE, mobileNumber, true, now);
+            
+            return username;
+        }
+
+        // 3. Create new user if none found
+        return createUserByMobileNumber(mobileNumber, referrerId);
     }
 
     /**
      * Create a new user with mobile number
      */
     private String createUserByMobileNumber(String mobileNumber) {
-        // Generate a random username and password
-        String username = MV_PREFIX + mobileNumber;
-        // String username = USERNAME_PREFIX + UUID.randomUUID().toString().replace("-", "").substring(0, USERNAME_SUFFIX_LENGTH);
+        return createUserByMobileNumber(mobileNumber, null);
+    }
+
+    /**
+     * Create a new user with mobile number and referrer support
+     */
+    private String createUserByMobileNumber(String mobileNumber, String referrerId) {
+        // Generate username with MV_ prefix + mobile number (for readability)
+        String username = generateReadableUsername(mobileNumber);
         String password = UUID.randomUUID().toString();
 
-        logger.info("Creating new mobile user: username={}, mobile number={}", username, mobileNumber);
+        logger.info("Creating new mobile user: username={}, mobile number={}, referrerId={}", username, mobileNumber, referrerId);
 
         // Create the user
         UserDto userDto = new UserDto();
@@ -132,11 +170,29 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
 
         OffsetDateTime now = OffsetDateTime.now();
 
-        // Create the user in the database
-        userService.createUser(userDto, password);
+        // Create the user in the database with referrer support
+        userService.createUser(userDto, password, referrerId);
         userIdentificationService.addUserIdentification(username, MOBILE_NUMBER_TYPE, mobileNumber, true, now);
 
         return username;
+    }
+
+    /**
+     * Generate readable username using MV_ prefix + mobile number
+     * Falls back to random username if the preferred one is already taken
+     */
+    private String generateReadableUsername(String mobileNumber) {
+        String preferredUsername = MV_PREFIX + mobileNumber;
+        
+        // Check if preferred username is available
+        if (!userService.userExists(preferredUsername)) {
+            return preferredUsername;
+        }
+        
+        // Fallback to random username if preferred one is taken
+        String randomUsername = MV_PREFIX + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+        logger.warn("Preferred username {} already exists, using random username: {}", preferredUsername, randomUsername);
+        return randomUsername;
     }
 
     @Override

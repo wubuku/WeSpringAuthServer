@@ -125,12 +125,13 @@ public class SocialLoginController {
     public void wechatLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
                             @RequestParam("loginCode") String loginCode,
                             @RequestParam("mobileCode") String mobileCode,
+                            @RequestParam(value = "referrerId", required = false) String referrerId,
                             HttpServletResponse response) throws IOException {
 
         validateLoginParameters(loginCode, mobileCode);
 
         try {
-            CustomUserDetails userDetails = weChatService.processWeChatLogin(loginCode, mobileCode);
+            CustomUserDetails userDetails = weChatService.processWeChatLogin(loginCode, mobileCode, referrerId);
             Authentication authentication = createAuthentication(userDetails);
             RegisteredClient registeredClient = getRegisteredClient(clientId);
 
