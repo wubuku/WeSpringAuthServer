@@ -172,32 +172,47 @@ public class WeChatService {
      * This is called when user is found by existing WeChat identifications but might be missing some
      */
     private void ensureAllWeChatIdentifications(String username, String openId, String unionId, String mobileNumber, OffsetDateTime now) {
+        logger.info("Ensuring all WeChat identifications for user: username={}, openId={}, unionId={}, mobileNumber={}", 
+                   username, openId, unionId, mobileNumber);
+        
         List<UserIdentificationDto> existingIdentifications = userIdentificationService.getUserIdentifications(username);
+        logger.debug("Existing identifications count: {}", existingIdentifications.size());
+        
+        for (UserIdentificationDto id : existingIdentifications) {
+            logger.debug("Existing identification: type={}, identifier={}, verified={}", 
+                        id.getUserIdentificationTypeId(), id.getIdentifier(), id.getVerified());
+        }
         
         // Check and add WECHAT_OPENID_TYPE identification if not exists
         boolean hasOpenId = existingIdentifications.stream()
             .anyMatch(id -> WECHAT_OPENID_TYPE.equals(id.getUserIdentificationTypeId()));
+        logger.debug("Has WECHAT_OPENID_TYPE: {}", hasOpenId);
         if (!hasOpenId) {
             userIdentificationService.addUserIdentification(username, WECHAT_OPENID_TYPE, openId, true, now);
-            logger.debug("Added missing WECHAT_OPENID_TYPE identification for user: {}", username);
+            logger.info("Added missing WECHAT_OPENID_TYPE identification for user: {}", username);
         }
         
         // Check and add WECHAT_UNIONID_TYPE identification if not exists and unionId is available
         if (unionId != null && !unionId.isEmpty()) {
             boolean hasUnionId = existingIdentifications.stream()
                 .anyMatch(id -> WECHAT_UNIONID_TYPE.equals(id.getUserIdentificationTypeId()));
+            logger.debug("Has WECHAT_UNIONID_TYPE: {}", hasUnionId);
             if (!hasUnionId) {
                 userIdentificationService.addUserIdentification(username, WECHAT_UNIONID_TYPE, unionId, true, now);
-                logger.debug("Added missing WECHAT_UNIONID_TYPE identification for user: {}", username);
+                logger.info("Added missing WECHAT_UNIONID_TYPE identification for user: {}", username);
             }
         }
         
         // Check and add WECHAT_MOBILE_TYPE identification if not exists
         boolean hasWeChatMobile = existingIdentifications.stream()
             .anyMatch(id -> WECHAT_MOBILE_TYPE.equals(id.getUserIdentificationTypeId()));
+        logger.info("Has WECHAT_MOBILE_TYPE: {}, mobileNumber: {}", hasWeChatMobile, mobileNumber);
         if (!hasWeChatMobile) {
+            logger.info("Adding WECHAT_MOBILE_TYPE identification for user: {}, mobileNumber: {}", username, mobileNumber);
             userIdentificationService.addUserIdentification(username, WECHAT_MOBILE_TYPE, mobileNumber, true, now);
-            logger.info("Added missing WECHAT_MOBILE_TYPE identification for user: {}", username);
+            logger.info("Successfully added WECHAT_MOBILE_TYPE identification for user: {}", username);
+        } else {
+            logger.info("WECHAT_MOBILE_TYPE identification already exists for user: {}", username);
         }
     }
 
