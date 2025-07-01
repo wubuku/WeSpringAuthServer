@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.*;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
@@ -98,6 +99,21 @@ public class OAuth2AuthenticationHelper {
             throw new IllegalStateException(EXCEPTION_REGISTERED_CLIENT_NOT_FOUND + clientId);
         }
         return registeredClient;
+    }
+
+    /**
+     * 创建认证对象
+     * 修复说明：使用AuthenticationUtils确保groups信息正确设置到Authentication details中
+     */
+    public Authentication createAuthentication(CustomUserDetails userDetails) {
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities());
+        
+        // 使用AuthenticationUtils设置用户详细信息，包括groups
+        org.dddml.ffvtraceability.auth.authentication.AuthenticationUtils
+                .setUserDetailsToAuthentication(authentication, userDetails);
+        
+        return authentication;
     }
 
     /**

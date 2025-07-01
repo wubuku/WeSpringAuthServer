@@ -5,7 +5,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.exception.AuthenticationException;
 import org.dddml.ffvtraceability.auth.security.CustomUserDetails;
 import org.dddml.ffvtraceability.auth.service.OAuth2AuthenticationHelper;
-import org.dddml.ffvtraceability.auth.service.OAuth2TokenService;
 import org.dddml.ffvtraceability.auth.service.SmsService;
 import org.dddml.ffvtraceability.auth.service.SmsVerificationService;
 import org.slf4j.Logger;
@@ -47,8 +46,6 @@ public class SmsLoginController {
     private SmsService smsService;
     @Autowired
     private SmsVerificationService smsVerificationService;
-    @Autowired
-    private OAuth2TokenService oAuth2TokenService;
     @Autowired
     private OAuth2AuthenticationHelper oAuth2AuthenticationHelper;
 
@@ -132,7 +129,7 @@ public class SmsLoginController {
                         HttpServletResponse response) throws IOException {
         try {
             CustomUserDetails userDetails = smsVerificationService.processSmsLogin(mobileNumber, verificationCode, referrerId);
-            Authentication authentication = oAuth2TokenService.createAuthentication(userDetails);
+            Authentication authentication = oAuth2AuthenticationHelper.createAuthentication(userDetails);
             RegisteredClient registeredClient = oAuth2AuthenticationHelper.getRegisteredClient(clientId);
 
             OAuth2AuthenticationHelper.TokenPair tokenPair = oAuth2AuthenticationHelper.generateTokenPair(registeredClient, authentication);
