@@ -115,12 +115,23 @@ get_fresh_wechat_codes() {
         echo ""
     done
     
-    # Get mobile code
+    # Get mobile code (optional)
     while true; do
-        read -p "Please enter WeChat mobile authorization code: " input_mobile_code
+        echo ""
+        echo "Note: Mobile authorization code is now optional."
+        echo "Press Enter to skip mobile code (WeChat login without phone number authorization)"
+        read -p "Please enter WeChat mobile authorization code (or press Enter to skip): " input_mobile_code
         
-        if [[ -n "$input_mobile_code" && "$input_mobile_code" != "exit" && "$input_mobile_code" != "quit" ]]; then
-            # Basic validation - WeChat codes are typically alphanumeric and around 10+ chars
+        if [[ -z "$input_mobile_code" ]]; then
+            # Empty input - skip mobile code
+            WECHAT_MOBILE_CODE=""
+            echo -e "${YELLOW}⚠️  Skipping mobile authorization. WeChat login will proceed without phone number.${NC}"
+            return 0
+        elif [[ "$input_mobile_code" == "exit" || "$input_mobile_code" == "quit" ]]; then
+            echo -e "${YELLOW}Exiting test script.${NC}"
+            exit 0
+        else
+            # Validate non-empty input
             if [[ ${#input_mobile_code} -ge 10 && "$input_mobile_code" =~ ^[A-Za-z0-9]+$ ]]; then
                 WECHAT_MOBILE_CODE="$input_mobile_code"
                 echo -e "${GREEN}✅ Mobile code accepted: ${input_mobile_code:0:20}...${NC}"
@@ -128,15 +139,9 @@ get_fresh_wechat_codes() {
             else
                 echo -e "${RED}❌ Invalid code format. WeChat codes are typically 10+ alphanumeric characters.${NC}"
                 echo "Example format: abc123def456ghi789"
+                echo "Or press Enter to skip mobile authorization."
             fi
-        elif [[ "$input_mobile_code" == "exit" || "$input_mobile_code" == "quit" ]]; then
-            echo -e "${YELLOW}Exiting test script.${NC}"
-            exit 0
-        else
-            echo -e "${RED}❌ Please enter a valid mobile authorization code or 'exit' to quit.${NC}"
         fi
-        
-        echo ""
     done
 }
 
@@ -355,15 +360,25 @@ test_wechat_login() {
         fi
         
         print_result "info" "Using WeChat login code: ${WECHAT_LOGIN_CODE:0:20}..."
-        print_result "info" "Using WeChat mobile code: ${WECHAT_MOBILE_CODE:0:20}..."
+        if [ -n "$WECHAT_MOBILE_CODE" ]; then
+            print_result "info" "Using WeChat mobile code: ${WECHAT_MOBILE_CODE:0:20}..."
+        else
+            print_result "info" "No mobile code provided - proceeding without phone number authorization"
+        fi
         
         # Encode the WeChat codes
         local encoded_login_code=$(urlencode "$WECHAT_LOGIN_CODE")
-        local encoded_mobile_code=$(urlencode "$WECHAT_MOBILE_CODE")
         
-        # Make WeChat login request with updated parameters
+        # Build URL with conditional mobile code parameter
+        local wechat_url="${BASE_URL}/wechat/login?loginCode=${encoded_login_code}"
+        if [ -n "$WECHAT_MOBILE_CODE" ]; then
+            local encoded_mobile_code=$(urlencode "$WECHAT_MOBILE_CODE")
+            wechat_url="${wechat_url}&mobileCode=${encoded_mobile_code}"
+        fi
+        
+        # Make WeChat login request
         local wechat_response=$(curl -s -X GET \
-            "${BASE_URL}/wechat/login?loginCode=${encoded_login_code}&mobileCode=${encoded_mobile_code}" \
+            "$wechat_url" \
             -H "Accept: application/json" \
             -w "\n%{http_code}")
         
