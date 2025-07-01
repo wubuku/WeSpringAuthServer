@@ -124,7 +124,7 @@ public class SocialLoginController {
     @GetMapping("/wechat/login")
     public void wechatLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
                             @RequestParam("loginCode") String loginCode,
-                            @RequestParam("mobileCode") String mobileCode,
+                            @RequestParam(value = "mobileCode", required = false) String mobileCode,
                             @RequestParam(value = "referrerId", required = false) String referrerId,
                             HttpServletResponse response) throws IOException {
 
@@ -154,7 +154,7 @@ public class SocialLoginController {
     public ResponseEntity<Map<String, Object>> refreshToken(
             @RequestParam(value = "grant_type", required = false) String grantType,
             @RequestParam(value = "refresh_token", required = false) String refreshTokenValue,
-            @RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+            @RequestParam(value = "client_Id", defaultValue = DEFAULT_CLIENT_ID) String clientId, // 注意这个方法使用了不一样的 URL 参数命名风格
             @RequestParam(value = "client_secret", required = false) String clientSecret,
             HttpServletRequest request) {
 
