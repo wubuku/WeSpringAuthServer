@@ -190,9 +190,7 @@ public class SocialLoginController {
         if (loginCode == null || loginCode.trim().isEmpty()) {
             throw new IllegalArgumentException(EXCEPTION_WECHAT_LOGIN_CODE_EMPTY);
         }
-        if (mobileCode == null || mobileCode.trim().isEmpty()) {
-            throw new IllegalArgumentException(EXCEPTION_MOBILE_CODE_EMPTY);
-        }
+        // Mobile code is now optional - no validation needed
     }
 
     private Authentication createAuthentication(CustomUserDetails userDetails) {
