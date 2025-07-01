@@ -152,15 +152,34 @@ public class WeChatService {
                 username = mobileUsername.get();
                 logger.info("Found existing user with MOBILE_NUMBER_TYPE: {}, binding WeChat identifications", username);
                 
-                // Add WeChat identifications to this user
-                userIdentificationService.addUserIdentification(username, WECHAT_OPENID_TYPE, openId, true, now);
+                // Get existing identifications for this user
+                List<UserIdentificationDto> existingIdentifications = userIdentificationService.getUserIdentifications(username);
                 
-                if (unionId != null && !unionId.isEmpty()) {
-                    userIdentificationService.addUserIdentification(username, WECHAT_UNIONID_TYPE, unionId, true, now);
+                // Check and add WECHAT_OPENID_TYPE identification if not exists
+                boolean hasOpenId = existingIdentifications.stream()
+                    .anyMatch(id -> WECHAT_OPENID_TYPE.equals(id.getUserIdentificationTypeId()));
+                if (!hasOpenId) {
+                    userIdentificationService.addUserIdentification(username, WECHAT_OPENID_TYPE, openId, true, now);
+                    logger.debug("Added WECHAT_OPENID_TYPE identification for user: {}", username);
                 }
                 
-                // Also add WECHAT_MOBILE_TYPE identification
-                userIdentificationService.addUserIdentification(username, WECHAT_MOBILE_TYPE, mobileNumber, true, now);
+                // Check and add WECHAT_UNIONID_TYPE identification if not exists and unionId is available
+                if (unionId != null && !unionId.isEmpty()) {
+                    boolean hasUnionId = existingIdentifications.stream()
+                        .anyMatch(id -> WECHAT_UNIONID_TYPE.equals(id.getUserIdentificationTypeId()));
+                    if (!hasUnionId) {
+                        userIdentificationService.addUserIdentification(username, WECHAT_UNIONID_TYPE, unionId, true, now);
+                        logger.debug("Added WECHAT_UNIONID_TYPE identification for user: {}", username);
+                    }
+                }
+                
+                // Check and add WECHAT_MOBILE_TYPE identification if not exists
+                boolean hasWeChatMobile = existingIdentifications.stream()
+                    .anyMatch(id -> WECHAT_MOBILE_TYPE.equals(id.getUserIdentificationTypeId()));
+                if (!hasWeChatMobile) {
+                    userIdentificationService.addUserIdentification(username, WECHAT_MOBILE_TYPE, mobileNumber, true, now);
+                    logger.debug("Added WECHAT_MOBILE_TYPE identification for user: {}", username);
+                }
                 
                 return username;
             }
