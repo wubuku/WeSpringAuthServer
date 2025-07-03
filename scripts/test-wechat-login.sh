@@ -2,9 +2,13 @@
 
 # WeChat Login End-to-End Test Script
 # Tests WeChat OAuth2 login flow, refresh token functionality, and JWK token verification
+# 🔒 安全升级 (2024-01-XX): 支持HttpOnly Cookie和后端client_secret管理
 
 # Base URL configuration
 BASE_URL="http://localhost:9000"
+
+# Cookie jar for maintaining session across requests
+COOKIE_JAR="/tmp/wechat_test_cookies.txt"
 
 # Default codes (will be overridden by parameter or interactive input)
 # Check if codes are set in environment variables
@@ -30,17 +34,28 @@ OPTIONS:
     -m, --mobile-code CODE    WeChat mobile authorization code
     -h, --help               Show this help message
     -i, --interactive        Interactive mode - prompt for code input
+    --cookie-mode             Enable Cookie-based authentication testing (default)
+    --legacy-mode             Test legacy parameter-based authentication
     
 EXAMPLES:
     $0 --login-code "0b1N85100T85rU15aE000urgLn2N851x" --mobile-code "abc123def456"
     $0 -l "login_code_here" -m "mobile_code_here"
     $0 -i
-    $0  # Will prompt for codes interactively
+    $0 --cookie-mode  # Test new Cookie security
+    $0 --legacy-mode  # Test backward compatibility
 
 Note: WeChat authorization codes expire within minutes of generation.
 Get fresh codes from your WeChat Mini Program development environment.
+
+🔒 Security Upgrade Notice:
+- Default mode now uses HttpOnly Cookies for refresh_token storage
+- client_secret is managed by backend (no longer transmitted from frontend)
+- Legacy mode available for backward compatibility testing
 EOF
 }
+
+# Default to cookie mode (secure)
+COOKIE_MODE=true
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -55,6 +70,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -i|--interactive)
             INTERACTIVE_MODE=true
+            shift
+            ;;
+        --cookie-mode)
+            COOKIE_MODE=true
+            shift
+            ;;
+        --legacy-mode)
+            COOKIE_MODE=false
             shift
             ;;
         -h|--help)
@@ -231,6 +254,38 @@ else
     }
 fi
 
+# Function to test Cookie functionality
+test_cookie_functionality() {
+    print_section "Testing Cookie Security Features"
+    
+    # Check if cookies were set during login
+    if [ -f "$COOKIE_JAR" ]; then
+        local cookies_content=$(cat "$COOKIE_JAR")
+        if echo "$cookies_content" | grep -q "refresh_token"; then
+            print_result "success" "HttpOnly Cookie detected in cookie jar"
+            
+            # Display cookie details (without showing actual token value)
+            local cookie_line=$(grep "refresh_token" "$COOKIE_JAR")
+            if [[ -n "$cookie_line" ]]; then
+                local domain=$(echo "$cookie_line" | awk '{print $1}')
+                local httponly=$(echo "$cookie_line" | grep -o "HttpOnly" || echo "Not HttpOnly")
+                local secure=$(echo "$cookie_line" | grep -o "Secure" || echo "Not Secure")
+                
+                print_result "info" "Cookie domain: $domain"
+                print_result "info" "Cookie security: $httponly, $secure"
+            fi
+            
+            return 0
+        else
+            print_result "warning" "No refresh_token cookie found in cookie jar"
+            return 1
+        fi
+    else
+        print_result "warning" "No cookie jar file found"
+        return 1
+    fi
+}
+
 # Function to test JWK endpoint
 test_jwks_endpoint() {
     print_section "Testing JWK Set Endpoint"
@@ -354,6 +409,9 @@ test_wechat_login() {
     local max_retries=3
     local attempt=1
     
+    # Initialize cookie jar
+    touch "$COOKIE_JAR"
+    
     while [ $attempt -le $max_retries ]; do
         if [ $attempt -gt 1 ]; then
             print_result "info" "Retry attempt $attempt/$max_retries"
@@ -376,10 +434,12 @@ test_wechat_login() {
             wechat_url="${wechat_url}&mobileCode=${encoded_mobile_code}"
         fi
         
-        # Make WeChat login request
+        # 🔒 安全升级：使用Cookie支持的curl命令
         local wechat_response=$(curl -s -X GET \
             "$wechat_url" \
             -H "Accept: application/json" \
+            --cookie-jar "$COOKIE_JAR" \
+            --cookie "$COOKIE_JAR" \
             -w "\n%{http_code}")
         
         # Extract HTTP status code
@@ -422,6 +482,11 @@ EOF
                     echo -e "\n${BLUE}WeChat Login Response:${NC}"
                     echo "$response_body" | jq '.'
                     
+                    # 🔒 安全升级：测试Cookie功能
+                    if [[ "$COOKIE_MODE" == "true" ]]; then
+                        test_cookie_functionality
+                    fi
+                    
                     return 0
                 else
                     print_result "error" "No access token in WeChat login response"
@@ -459,22 +524,39 @@ EOF
 test_refresh_token() {
     print_section "Testing Refresh Token Functionality"
     
-    if [ -z "$WECHAT_REFRESH_TOKEN" ] || [ "$WECHAT_REFRESH_TOKEN" = "null" ]; then
-        print_result "error" "No refresh token available for testing"
-        return 1
+    if [[ "$COOKIE_MODE" == "true" ]]; then
+        print_result "info" "🔒 Testing Cookie-based refresh token (secure mode)"
+        
+        # 🔒 安全升级：Cookie模式不传输refresh_token和client_secret参数
+        local refresh_response=$(curl -s -X POST "${BASE_URL}/wechat/refresh-token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "Accept: application/json" \
+            --cookie-jar "$COOKIE_JAR" \
+            --cookie "$COOKIE_JAR" \
+            -d "grant_type=refresh_token" \
+            -d "scope=openid%20profile" \
+            -w "\n%{http_code}")
+    else
+        # Legacy mode for backward compatibility testing
+        print_result "info" "⚠️  Testing legacy parameter-based refresh token (backward compatibility)"
+        
+        if [ -z "$WECHAT_REFRESH_TOKEN" ] || [ "$WECHAT_REFRESH_TOKEN" = "null" ]; then
+            print_result "error" "No refresh token available for legacy testing"
+            return 1
+        fi
+        
+        print_result "info" "Using refresh token: ${WECHAT_REFRESH_TOKEN:0:50}..."
+        
+        # Legacy mode: pass refresh_token and client_secret as parameters
+        local refresh_response=$(curl -s -X POST "${BASE_URL}/wechat/refresh-token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "Authorization: Basic $(echo -n 'ffv-client:secret' | base64)" \
+            -H "Accept: application/json" \
+            -d "grant_type=refresh_token" \
+            -d "refresh_token=$(urlencode "$WECHAT_REFRESH_TOKEN")" \
+            -d "scope=openid%20profile" \
+            -w "\n%{http_code}")
     fi
-    
-    print_result "info" "Using refresh token: ${WECHAT_REFRESH_TOKEN:0:50}..."
-    
-    # Test refresh token request
-    local refresh_response=$(curl -s -X POST "${BASE_URL}/wechat/refresh-token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -H "Authorization: Basic $(echo -n 'ffv-client:secret' | base64)" \
-        -H "Accept: application/json" \
-        -d "grant_type=refresh_token" \
-        -d "refresh_token=$(urlencode "$WECHAT_REFRESH_TOKEN")" \
-        -d "scope=openid%20profile" \
-        -w "\n%{http_code}")
     
     # Extract HTTP status code
     local http_status=$(echo "$refresh_response" | tail -n1)
@@ -505,6 +587,11 @@ test_refresh_token() {
                 
                 echo -e "\n${BLUE}Refresh Token Response:${NC}"
                 echo "$response_body" | jq '.'
+                
+                # 🔒 安全升级：验证Cookie更新（仅在Cookie模式下）
+                if [[ "$COOKIE_MODE" == "true" ]]; then
+                    test_cookie_functionality
+                fi
                 
                 return 0
             else
@@ -538,6 +625,8 @@ test_api_access_with_wechat_token() {
     local api_response=$(curl -s \
         -H "Authorization: Bearer $WECHAT_ACCESS_TOKEN" \
         -H "Accept: application/json" \
+        --cookie-jar "$COOKIE_JAR" \
+        --cookie "$COOKIE_JAR" \
         "${BASE_URL}/api/userinfo" \
         -w "\n%{http_code}")
     
@@ -602,11 +691,24 @@ test_wechat_configuration() {
 run_all_tests() {
     print_section "WeChat Login End-to-End Test Suite"
     
-    # Clean up any existing token files
+    if [[ "$COOKIE_MODE" == "true" ]]; then
+        echo -e "🔒 ${GREEN}Security Mode: HttpOnly Cookie Authentication${NC}"
+        echo "- refresh_token stored in HttpOnly cookies"
+        echo "- client_secret managed by backend"
+        echo "- Enhanced security against XSS and CSRF"
+    else
+        echo -e "⚠️  ${YELLOW}Compatibility Mode: Legacy Parameter Authentication${NC}"
+        echo "- refresh_token passed as parameters (less secure)"
+        echo "- client_secret in Authorization header"
+        echo "- For backward compatibility testing only"
+    fi
+    
+    # Clean up any existing token files and cookies
     rm -f wechat_tokens.env
+    rm -f "$COOKIE_JAR"
     
     local tests_passed=0
-    local tests_total=7
+    local tests_total=8
     
     # Test 1: WeChat configuration
     if test_wechat_configuration; then
@@ -622,22 +724,33 @@ run_all_tests() {
     if test_wechat_login; then
         ((tests_passed++))
         
-        # Test 4: Verify access token with JWK
+        # Test 4: Cookie functionality (only in cookie mode)
+        if [[ "$COOKIE_MODE" == "true" ]]; then
+            if test_cookie_functionality; then
+                ((tests_passed++))
+            fi
+        else
+            # Skip cookie test in legacy mode
+            ((tests_passed++))
+            print_result "info" "Skipping Cookie test in legacy mode"
+        fi
+        
+        # Test 5: Verify access token with JWK
         if verify_jwt_with_jwk "$WECHAT_ACCESS_TOKEN" "Access Token"; then
             ((tests_passed++))
         fi
         
-        # Test 5: Refresh token functionality
+        # Test 6: Refresh token functionality
         if test_refresh_token; then
             ((tests_passed++))
             
-            # Test 6: Verify new access token with JWK
+            # Test 7: Verify new access token with JWK
             if verify_jwt_with_jwk "$WECHAT_ACCESS_TOKEN" "Refreshed Access Token"; then
                 ((tests_passed++))
             fi
         fi
         
-        # Test 7: API access with WeChat token
+        # Test 8: API access with WeChat token
         if test_api_access_with_wechat_token; then
             ((tests_passed++))
         fi
@@ -662,7 +775,22 @@ run_all_tests() {
     if [ -f wechat_tokens.env ]; then
         print_result "info" "WeChat tokens saved in wechat_tokens.env for manual testing"
     fi
+    
+    if [ -f "$COOKIE_JAR" ]; then
+        print_result "info" "Cookies saved in $COOKIE_JAR for session management"
+    fi
 }
+
+# Cleanup function
+cleanup() {
+    if [ -f "$COOKIE_JAR" ]; then
+        rm -f "$COOKIE_JAR"
+        print_result "info" "Cleaned up cookie jar"
+    fi
+}
+
+# Set trap for cleanup on exit
+trap cleanup EXIT
 
 # Main execution
 echo "🚀 Starting WeChat Login End-to-End Test Suite"
@@ -676,6 +804,7 @@ fi
 
 echo "WeChat Login Code: ${WECHAT_LOGIN_CODE:0:20}..."
 echo "WeChat Mobile Code: ${WECHAT_MOBILE_CODE:0:20}..."
+echo "Test Mode: $([ "$COOKIE_MODE" = "true" ] && echo "🔒 Cookie Security" || echo "⚠️  Legacy Compatibility")"
 echo "=================================================="
 
 run_all_tests

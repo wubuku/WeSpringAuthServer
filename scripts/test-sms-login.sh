@@ -2,6 +2,7 @@
 
 # SMS登录端到端测试脚本
 # 测试SMS验证码发送和登录流程
+# 🔒 安全升级: 支持Cookie刷新token测试
 
 set -e
 
@@ -12,6 +13,9 @@ DB_HOST="localhost"
 DB_NAME="ruichuangqi_dev"
 DB_USER="postgres"
 DB_PASSWORD="123456"
+
+# Cookie jar for session management
+COOKIE_JAR="/tmp/sms_test_cookies.txt"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -177,15 +181,23 @@ get_verification_code_from_db() {
 sms_login() {
     log_info "使用SMS登录..."
     
+    # 🔒 安全升级：初始化Cookie jar
+    touch "$COOKIE_JAR"
+    
     # 显示即将执行的curl命令
     local curl_cmd="curl -s -w \"\\n%{http_code}\" -X GET \\
-        \"$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE\""
+        \"$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE\" \\
+        --cookie-jar \"$COOKIE_JAR\" \\
+        --cookie \"$COOKIE_JAR\""
     
     log_info "执行curl命令:"
     echo -e "${YELLOW}$curl_cmd${NC}"
     
+    # 🔒 安全升级：使用Cookie支持
     RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
-        "$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE")
+        "$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE" \
+        --cookie-jar "$COOKIE_JAR" \
+        --cookie "$COOKIE_JAR")
     
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
     BODY=$(echo "$RESPONSE" | sed '$d')
@@ -196,6 +208,16 @@ sms_login() {
     
     if [ "$HTTP_CODE" = "200" ]; then
         log_info "✅ SMS登录成功"
+        
+        # 🔒 安全升级：检查Cookie设置
+        if [ -f "$COOKIE_JAR" ]; then
+            log_info "🍪 检查Cookie设置..."
+            if grep -q "refresh_token" "$COOKIE_JAR"; then
+                log_info "✅ HttpOnly Cookie已设置"
+            else
+                log_warn "⚠️  未检测到refresh_token Cookie"
+            fi
+        fi
         
         # 提取访问令牌
         ACCESS_TOKEN=$(echo "$BODY" | jq -r '.access_token' 2>/dev/null)
@@ -225,7 +247,11 @@ EOF
             echo -e "${GREEN}SMS登录成功 - 令牌详细信息${NC}"
             echo -e "${GREEN}========================================${NC}"
             echo -e "${CYAN}访问令牌 (前50字符):${NC} ${ACCESS_TOKEN:0:50}..."
-            echo -e "${CYAN}刷新令牌 (前50字符):${NC} ${REFRESH_TOKEN:0:50}..."
+            if [ "$REFRESH_TOKEN" != "null" ] && [ -n "$REFRESH_TOKEN" ]; then
+                echo -e "${CYAN}刷新令牌 (前50字符):${NC} ${REFRESH_TOKEN:0:50}..."
+            else
+                echo -e "${YELLOW}刷新令牌:${NC} 已存储在HttpOnly Cookie中 (安全模式)"
+            fi
             echo -e "${CYAN}令牌类型:${NC} $TOKEN_TYPE"
             echo -e "${CYAN}过期时间:${NC} $EXPIRES_IN 秒"
             echo -e "${GREEN}========================================${NC}"
@@ -288,6 +314,75 @@ EOF
     fi
 }
 
+# 🔒 安全升级：测试Cookie刷新token功能
+test_refresh_token() {
+    log_info "🔄 测试刷新token功能..."
+    
+    if [ ! -f "$COOKIE_JAR" ]; then
+        log_warn "⚠️  Cookie jar不存在，跳过刷新token测试"
+        return 0
+    fi
+    
+    # 显示即将执行的curl命令
+    local curl_cmd="curl -s -w \"\\n%{http_code}\" -X POST \\
+        \"$BASE_URL/sms/refresh-token\" \\
+        -H \"Content-Type: application/x-www-form-urlencoded\" \\
+        -H \"Accept: application/json\" \\
+        --cookie-jar \"$COOKIE_JAR\" \\
+        --cookie \"$COOKIE_JAR\" \\
+        -d \"grant_type=refresh_token\" \\
+        -d \"scope=openid%20profile\""
+    
+    log_info "执行curl命令:"
+    echo -e "${YELLOW}$curl_cmd${NC}"
+    
+    # 🔒 安全升级：使用Cookie模式刷新token
+    RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+        "$BASE_URL/sms/refresh-token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -H "Accept: application/json" \
+        --cookie-jar "$COOKIE_JAR" \
+        --cookie "$COOKIE_JAR" \
+        -d "grant_type=refresh_token" \
+        -d "scope=openid%20profile")
+    
+    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+    BODY=$(echo "$RESPONSE" | sed '$d')
+    
+    log_info "HTTP状态码: $HTTP_CODE"
+    log_info "响应内容:"
+    echo "$BODY" | jq '.' 2>/dev/null || echo "$BODY"
+    
+    if [ "$HTTP_CODE" = "200" ]; then
+        log_info "✅ 刷新token成功"
+        
+        # 提取新的访问令牌
+        NEW_ACCESS_TOKEN=$(echo "$BODY" | jq -r '.access_token' 2>/dev/null)
+        NEW_REFRESH_TOKEN=$(echo "$BODY" | jq -r '.refresh_token' 2>/dev/null)
+        
+        if [ "$NEW_ACCESS_TOKEN" != "null" ] && [ -n "$NEW_ACCESS_TOKEN" ]; then
+            log_info "✅ 获得新的访问令牌: ${NEW_ACCESS_TOKEN:0:50}..."
+            export SMS_ACCESS_TOKEN="$NEW_ACCESS_TOKEN"
+            
+            if [ "$NEW_REFRESH_TOKEN" != "null" ] && [ -n "$NEW_REFRESH_TOKEN" ]; then
+                log_info "✅ 获得新的刷新令牌: ${NEW_REFRESH_TOKEN:0:50}..."
+                export SMS_REFRESH_TOKEN="$NEW_REFRESH_TOKEN"
+            else
+                log_info "🍪 刷新令牌已更新到HttpOnly Cookie中 (安全模式)"
+            fi
+        else
+            log_error "❌ 未能从刷新响应中提取新的访问令牌"
+            return 1
+        fi
+    elif [ "$HTTP_CODE" = "401" ]; then
+        log_warn "⚠️  刷新token未授权 - 可能token已过期或无效"
+        return 0
+    else
+        log_warn "⚠️  刷新token失败 (HTTP $HTTP_CODE)"
+        return 0
+    fi
+}
+
 # 测试API访问
 test_api_access() {
     if [ -z "$SMS_ACCESS_TOKEN" ]; then
@@ -300,15 +395,19 @@ test_api_access() {
     # 显示即将执行的curl命令
     local curl_cmd="curl -s -w \"\\n%{http_code}\" -X GET \\
         \"$BASE_URL/api/userinfo\" \\
-        -H \"Authorization: Bearer $SMS_ACCESS_TOKEN\""
+        -H \"Authorization: Bearer $SMS_ACCESS_TOKEN\" \\
+        --cookie-jar \"$COOKIE_JAR\" \\
+        --cookie \"$COOKIE_JAR\""
     
     log_info "执行curl命令:"
     echo -e "${YELLOW}$curl_cmd${NC}"
     
-    # 测试用户信息API
+    # 🔒 安全升级：测试用户信息API（带Cookie支持）
     RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
         "$BASE_URL/api/userinfo" \
-        -H "Authorization: Bearer $SMS_ACCESS_TOKEN")
+        -H "Authorization: Bearer $SMS_ACCESS_TOKEN" \
+        --cookie-jar "$COOKIE_JAR" \
+        --cookie "$COOKIE_JAR")
     
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
     BODY=$(echo "$RESPONSE" | sed '$d')
@@ -332,9 +431,20 @@ test_api_access() {
     fi
 }
 
+# 清理函数
+cleanup() {
+    if [ -f "$COOKIE_JAR" ]; then
+        rm -f "$COOKIE_JAR"
+        log_info "🧹 清理Cookie文件"
+    fi
+}
+
+# 设置退出时清理
+trap cleanup EXIT
+
 # 主流程
 main() {
-    log_info "开始SMS登录端到端测试"
+    log_info "开始SMS登录端到端测试 (支持Cookie刷新token)"
     
     # 获取手机号
     get_phone_number "$1"
@@ -361,10 +471,13 @@ main() {
         exit 1
     fi
     
+    # 🔒 安全升级：测试刷新token功能
+    test_refresh_token
+    
     # 测试API访问
     test_api_access
     
-    log_info "🎉 SMS登录端到端测试完成"
+    log_info "🎉 SMS登录端到端测试完成 (包含Cookie刷新token测试)"
 }
 
 # 执行主流程

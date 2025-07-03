@@ -4,9 +4,9 @@
 BASE_URL="http://localhost:9000"
 
 # 用户凭证配置
-USERNAME="admin" # admin / user
-PASSWORD="admin"
-NEW_PASSWORD="newPassword123!"  # 当需要修改密码时使用的新密码
+USERNAME="store_admin" # admin / user
+PASSWORD="store123"
+NEW_PASSWORD="store123"  # 当需要修改密码时使用的新密码
 
 # Base64URL encode function (no padding)
 base64url_encode() {

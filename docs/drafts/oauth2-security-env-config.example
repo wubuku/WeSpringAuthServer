@@ -1,0 +1,170 @@
+# OAuth2 安全配置环境变量示例
+# 用于WeSpringAuthServer OAuth2 Cookie安全机制
+
+# ==============================================
+# 🍪 Cookie 安全配置
+# ==============================================
+
+# Cookie域名设置（支持跨子域名）
+# 开发环境: .localhost
+# 生产环境: .yourcompany.com（替换为你的实际域名）
+export OAUTH2_COOKIE_DOMAIN=".yourcompany.com"
+
+# Cookie安全属性
+# 生产环境必须为true（仅HTTPS传输）
+export OAUTH2_COOKIE_SECURE=true
+
+# Cookie SameSite策略
+# Strict: 最严格，推荐生产环境
+# Lax: 中等严格，开发环境友好
+export OAUTH2_COOKIE_SAME_SITE=Strict
+
+# Cookie过期时间（秒）
+# 2592000 = 30天
+export OAUTH2_COOKIE_MAX_AGE=2592000
+
+# ==============================================
+# 🔒 安全策略配置
+# ==============================================
+
+# 启用Cookie模式（推荐true）
+export OAUTH2_SECURITY_COOKIE_MODE_ENABLED=true
+
+# 隐藏client_secret传输（推荐true）
+export OAUTH2_SECURITY_HIDE_CLIENT_SECRET=true
+
+# ==============================================
+# 🏗️ 客户端配置说明
+# ==============================================
+
+# ⚠️ 重要说明：
+# OAuth2客户端配置（client_id, client_secret等）统一在数据库中管理
+# 通过RegisteredClientRepository进行配置和维护
+# 
+# 请在数据库中配置以下客户端：
+# - ffv-client (默认Web客户端)
+# - wechat-client (微信小程序客户端) 
+# - sms-client (SMS登录客户端)
+#
+# 这样避免了配置文件和数据库的重复配置，保持数据一致性
+
+# ==============================================
+# 📱 WeChat 配置（如果使用微信登录）
+# ==============================================
+
+# 微信小程序AppID和AppSecret
+export WECHAT_APP_ID="your_wechat_app_id"
+export WECHAT_APP_SECRET="your_wechat_app_secret"
+
+# ==============================================
+# 📧 SMS 配置（如果使用SMS登录）
+# ==============================================
+
+# SMS服务提供商配置
+export SMS_PROVIDER_API_KEY="your_sms_api_key"
+export SMS_PROVIDER_SECRET="your_sms_secret"
+
+# ==============================================
+# 🗄️ 数据库配置示例
+# ==============================================
+
+# 数据库连接（根据实际情况调整）
+export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/auth_server"
+export SPRING_DATASOURCE_USERNAME="auth_user"
+export SPRING_DATASOURCE_PASSWORD="secure_password"
+
+# ==============================================
+# 🚀 部署示例脚本
+# ==============================================
+
+# 生产环境部署前设置这些环境变量：
+
+#!/bin/bash
+# production-deploy.sh
+
+# 设置OAuth2安全配置
+export OAUTH2_COOKIE_DOMAIN=".yourcompany.com"
+export OAUTH2_COOKIE_SECURE=true
+export OAUTH2_COOKIE_SAME_SITE=Strict
+export OAUTH2_SECURITY_COOKIE_MODE_ENABLED=true
+export OAUTH2_SECURITY_HIDE_CLIENT_SECRET=true
+
+# 启动应用
+java -jar ffvtraceability-auth-server.jar
+
+echo "✅ WeSpringAuthServer deployed with OAuth2 Cookie security enabled!"
+
+# ==============================================
+# 微信小程序专用配置 (替代Cookie方案)
+# ==============================================
+
+# 微信小程序安全策略
+OAUTH2_MINIPROGRAM_SECURITY_MODE=encrypted-storage
+
+# 加密密钥 (用于小程序token加密)
+OAUTH2_MINIPROGRAM_ENCRYPTION_KEY=your-aes-256-encryption-key-here
+
+# Token过期时间 (小程序较短)
+OAUTH2_MINIPROGRAM_TOKEN_EXPIRY=3600
+
+# ==============================================
+# 日志和监控配置
+# ==============================================
+
+# OAuth2 安全日志级别
+logging.level.org.dddml.ffvtraceability.auth.config=INFO
+
+# 审计日志
+audit.security.enabled=true
+audit.security.log-client-credentials=false  # 绝不记录client_secret
+
+# ==============================================
+# CORS 配置 (跨子域支持)
+# ==============================================
+
+# 允许的源 (支持子域名)
+auth-server.cors.allowed-origins=https://app.yourcompany.com,https://admin.yourcompany.com,https://api.yourcompany.com
+
+# 允许凭证 (Cookie支持)
+auth-server.cors.allow-credentials=true
+
+# ==============================================
+# 健康检查和监控
+# ==============================================
+
+# Actuator端点 (监控Cookie安全状态)
+management.endpoints.web.exposure.include=health,info,oauth2-security
+
+# 自定义健康检查
+management.health.oauth2-security.enabled=true
+
+# ==============================================
+# 开发环境快速配置
+# ==============================================
+
+# 开发环境简化配置
+# OAUTH2_COOKIE_DOMAIN=.localhost
+# OAUTH2_COOKIE_SECURE=false
+# OAUTH2_FFV_CLIENT_SECRET=dev-secret-key
+# OAUTH2_WECHAT_CLIENT_SECRET=dev-wechat-secret
+# OAUTH2_SMS_CLIENT_SECRET=dev-sms-secret
+
+# ==============================================
+# 安全提醒和最佳实践
+# ==============================================
+
+# ⚠️  生产环境必备：
+# 1. 使用HTTPS和Secure Cookie
+# 2. 强密钥 (至少32位随机字符)
+# 3. 定期轮换client_secret
+# 4. 监控异常登录行为
+# 5. 配置WAF防护
+
+# 🔐 密钥生成命令：
+# openssl rand -base64 32
+
+# 🌐 子域名DNS配置：
+# *.yourcompany.com -> 你的服务器IP
+
+# 📱 微信小程序：
+# 需要独立的加密存储方案，不能使用Cookie 

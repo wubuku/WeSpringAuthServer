@@ -154,14 +154,34 @@ public class OAuth2AuthenticationHelper {
     }
 
     /**
-     * 写入Token响应
+     * 写入Token响应 - 支持Cookie安全模式
+     * 
+     * @param response HttpServletResponse
+     * @param tokenPair TokenPair包含access_token和refresh_token
+     * @param cookieMode 是否为Cookie模式（true=不在响应中包含refresh_token）
      */
-    public void writeTokenResponse(HttpServletResponse response, TokenPair tokenPair) throws IOException {
-        Map<String, Object> responseBody = createTokenResponseBody(tokenPair.getAccessToken(),
-                tokenPair.getRefreshToken());
+    public void writeTokenResponse(HttpServletResponse response, TokenPair tokenPair, boolean cookieMode) throws IOException {
+        Map<String, Object> responseBody;
+        
+        if (cookieMode) {
+            // 🔒 Cookie安全模式：只返回access_token，refresh_token已存储在HttpOnly Cookie中
+            responseBody = createSecureTokenResponseBody(tokenPair.getAccessToken());
+            logger.debug("Created secure token response (Cookie mode) - refresh_token not included in response");
+        } else {
+            // 传统模式：包含refresh_token在响应中（向后兼容）
+            responseBody = createTokenResponseBody(tokenPair.getAccessToken(), tokenPair.getRefreshToken());
+            logger.debug("Created traditional token response - refresh_token included in response");
+        }
 
         response.setContentType(CONTENT_TYPE_JSON);
         response.getWriter().write(new ObjectMapper().writeValueAsString(responseBody));
+    }
+
+    /**
+     * 写入Token响应 - 传统模式（向后兼容）
+     */
+    public void writeTokenResponse(HttpServletResponse response, TokenPair tokenPair) throws IOException {
+        writeTokenResponse(response, tokenPair, false);
     }
 
     /**
@@ -179,13 +199,16 @@ public class OAuth2AuthenticationHelper {
     }
 
     /**
-     * 刷新Token处理
+     * 刷新Token处理 - 支持Cookie安全模式
+     * 
+     * @param cookieMode 是否为Cookie模式（true=不在响应中包含refresh_token）
      */
     public ResponseEntity<Map<String, Object>> processRefreshToken(String grantType,
                                                                    String refreshTokenValue,
                                                                    String clientId,
                                                                    String clientSecret,
-                                                                   HttpServletRequest request) {
+                                                                   HttpServletRequest request,
+                                                                   boolean cookieMode) {
         try {
             // Extract and validate client credentials
             ClientCredentials credentials = extractClientCredentials(request, clientId, clientSecret);
@@ -210,12 +233,35 @@ public class OAuth2AuthenticationHelper {
 
             // Return success response
             OAuth2RefreshToken refreshToken = authorization.getRefreshToken().getToken();
-            return createTokenResponse(newAccessToken, refreshToken);
+            
+                        if (cookieMode) {
+                // 🔒 Cookie安全模式：只返回access_token，refresh_token通过header传递给controller
+                Map<String, Object> secureResponseBody = createSecureTokenResponseBody(newAccessToken);
+                return ResponseEntity.ok()
+                        .header("Content-Type", "application/json;charset=UTF-8")
+                        .header("X-New-Refresh-Token", refreshToken.getTokenValue()) // 用于Cookie更新
+                        .body(secureResponseBody);
+            } else {
+                // 传统模式：包含refresh_token在响应中（向后兼容）
+                return createTokenResponse(newAccessToken, refreshToken);
+            }
 
         } catch (Exception e) {
             logger.error("Error processing refresh token: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(createErrorResponse(ERROR_SERVER_ERROR, MSG_INTERNAL_SERVER_ERROR));
         }
+    }
+
+    /**
+     * 刷新Token处理 - 向后兼容方法
+     * 默认使用传统模式（包含refresh_token在响应中）
+     */
+    public ResponseEntity<Map<String, Object>> processRefreshToken(String grantType,
+                                                                   String refreshTokenValue,
+                                                                   String clientId,
+                                                                   String clientSecret,
+                                                                   HttpServletRequest request) {
+        return processRefreshToken(grantType, refreshTokenValue, clientId, clientSecret, request, false);
     }
 
     // Private methods
@@ -323,6 +369,24 @@ public class OAuth2AuthenticationHelper {
                     accessToken.getIssuedAt().getEpochSecond());
         }
 
+        return responseBody;
+    }
+
+    /**
+     * 创建安全的Token响应体 - 不包含refresh_token
+     * 用于Cookie安全模式，refresh_token已存储在HttpOnly Cookie中
+     */
+    private Map<String, Object> createSecureTokenResponseBody(OAuth2AccessToken accessToken) {
+        Map<String, Object> responseBody = new HashMap<>();
+        responseBody.put("access_token", accessToken.getTokenValue());
+        responseBody.put("token_type", BEARER_TOKEN_TYPE);
+
+        if (accessToken.getIssuedAt() != null && accessToken.getExpiresAt() != null) {
+            responseBody.put("expires_in", accessToken.getExpiresAt().getEpochSecond() -
+                    accessToken.getIssuedAt().getEpochSecond());
+        }
+
+        // 🔒 安全注意：故意不包含refresh_token，因为它已存储在HttpOnly Cookie中
         return responseBody;
     }
 
