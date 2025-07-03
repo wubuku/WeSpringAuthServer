@@ -38,6 +38,7 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.dddml.ffvtraceability.auth.service.UserService;
 
 import java.security.*;
 import java.security.cert.Certificate;
@@ -55,10 +56,12 @@ public class AuthorizationServerConfig {
 
     private final JwtKeyProperties jwtKeyProperties;
     private final AuthServerProperties authServerProperties;
+    private final UserService userService;
 
-    public AuthorizationServerConfig(JwtKeyProperties jwtKeyProperties, AuthServerProperties authServerProperties) {
+    public AuthorizationServerConfig(JwtKeyProperties jwtKeyProperties, AuthServerProperties authServerProperties, UserService userService) {
         this.jwtKeyProperties = jwtKeyProperties;
         this.authServerProperties = authServerProperties;
+        this.userService = userService;
     }
 
     @Bean
@@ -117,7 +120,7 @@ public class AuthorizationServerConfig {
         JwtEncoder jwtEncoder = new NimbusJwtEncoder(jwkSource());
         JwtGenerator jwtGenerator = new JwtGenerator(jwtEncoder);
 
-        // 🎯 智能JWT定制器：兼容WeChat登录的安全解决方案
+        // 🎯 智能JWT定制器：兼容WeChat登录、SMS登录的安全解决方案
         // 根据测试结果和源码分析，采用防御性编程确保兼容性
         jwtGenerator.setJwtCustomizer(context -> {
             if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
@@ -153,6 +156,69 @@ public class AuthorizationServerConfig {
                             }
                         } catch (Exception e) {
                             logger.debug("Failed to add authorities to JWT: {}", e.getMessage());
+                        }
+
+                        // 🔑 添加手机号claim - 支持SMS登录和微信手机授权登录
+                        try {
+                            String phoneNumber = null;
+                            
+                            // 方法1：从CustomUserDetails直接获取（优先）
+                            if (authentication.getPrincipal() instanceof org.dddml.ffvtraceability.auth.security.CustomUserDetails) {
+                                org.dddml.ffvtraceability.auth.security.CustomUserDetails userDetails = 
+                                    (org.dddml.ffvtraceability.auth.security.CustomUserDetails) authentication.getPrincipal();
+                                phoneNumber = userDetails.getPhoneNumber();
+                                if (phoneNumber != null && !phoneNumber.trim().isEmpty()) {
+                                    logger.debug("Found phone number from CustomUserDetails: {}", phoneNumber.substring(0, 3) + "****");
+                                }
+                            }
+                            
+                            // 方法2：从Authentication details中获取（备用）
+                            if (phoneNumber == null || phoneNumber.trim().isEmpty()) {
+                                Object details = authentication.getDetails();
+                                if (details instanceof Map) {
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Object> detailsMap = (Map<String, Object>) details;
+                                    if (detailsMap.containsKey("phoneNumber")) {
+                                        Object phoneObj = detailsMap.get("phoneNumber");
+                                        if (phoneObj instanceof String) {
+                                            phoneNumber = (String) phoneObj;
+                                            if (phoneNumber != null && !phoneNumber.trim().isEmpty()) {
+                                                logger.debug("Found phone number from authentication details: {}", phoneNumber.substring(0, 3) + "****");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // 方法3：🚀 Token刷新时重新查询用户信息（关键修复）
+                            if (phoneNumber == null || phoneNumber.trim().isEmpty()) {
+                                String username = authentication.getName();
+                                if (username != null && !username.trim().isEmpty()) {
+                                    try {
+                                        // 重新从UserService获取完整的用户信息
+                                        org.dddml.ffvtraceability.auth.security.CustomUserDetails freshUserDetails = 
+                                            (org.dddml.ffvtraceability.auth.security.CustomUserDetails) userService.getUserDetails(username);
+                                        if (freshUserDetails != null) {
+                                            phoneNumber = freshUserDetails.getPhoneNumber();
+                                            if (phoneNumber != null && !phoneNumber.trim().isEmpty()) {
+                                                logger.debug("Found phone number from fresh UserService query during token refresh: {}", phoneNumber.substring(0, 3) + "****");
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        logger.debug("Failed to refresh user details for phone number: {}", e.getMessage());
+                                    }
+                                }
+                            }
+                            
+                            // 添加手机号claim到JWT
+                            if (phoneNumber != null && !phoneNumber.trim().isEmpty()) {
+                                claims.claim("phone_number", phoneNumber);
+                                logger.debug("Added phone_number claim to JWT for SMS/WeChat login");
+                            } else {
+                                logger.debug("No phone number found for user: {}", authentication.getName());
+                            }
+                        } catch (Exception e) {
+                            logger.debug("Failed to add phone_number to JWT: {}", e.getMessage());
                         }
 
                         // 安全地添加组信息 - 从Authentication details中获取

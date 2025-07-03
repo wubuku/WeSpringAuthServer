@@ -238,6 +238,46 @@ public class UserService {
         return count > 0;
     }
 
+    /**
+     * 获取用户当前的手机号
+     * 
+     * @param username 用户名
+     * @return 当前手机号，如果没有则返回null
+     */
+    @Transactional(readOnly = true)
+    public String getCurrentMobileNumber(String username) {
+        try {
+            String sql = "SELECT mobile_number FROM users WHERE username = ?";
+            return jdbcTemplate.queryForObject(sql, String.class, username);
+        } catch (Exception e) {
+            logger.debug("Failed to get mobile number for user: {}", username);
+            return null;
+        }
+    }
+
+    /**
+     * 更新用户的手机号
+     * 
+     * @param username 用户名  
+     * @param mobileNumber 新的手机号
+     */
+    @Transactional
+    public void updateUserMobileNumber(String username, String mobileNumber) {
+        String sql = """
+                UPDATE users 
+                SET mobile_number = ?, updated_at = ? 
+                WHERE username = ?
+                """;
+        OffsetDateTime now = OffsetDateTime.now();
+        int rowsUpdated = jdbcTemplate.update(sql, mobileNumber, now, username);
+        
+        if (rowsUpdated > 0) {
+            logger.debug("Successfully updated mobile_number for user: {}", username);
+        } else {
+            logger.warn("No rows updated when setting mobile_number for user: {}", username);
+        }
+    }
+
     private String generateOneTimePassword() {
         StringBuilder sb = new StringBuilder(OTP_LENGTH);
         for (int i = 0; i < OTP_LENGTH; i++) {
@@ -250,7 +290,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public CustomUserDetails getUserDetails(String username) {
         String queryUser = """
-                SELECT u.username, u.password, u.enabled, u.password_change_required, u.password_last_changed, u.first_login
+                SELECT u.username, u.password, u.enabled, u.password_change_required, u.password_last_changed, u.first_login, u.mobile_number
                 FROM users u
                 WHERE u.username = ?
                 """;
@@ -304,12 +344,21 @@ public class UserService {
         logger.debug("User {} loaded with groups: {}", username, groupNames);
         OffsetDateTime passwordLastChanged = OffsetDateTimeUtil.toOffsetDateTime(userInfo.get("password_last_changed"));
 
+        // 🔑 获取手机号并设置到CustomUserDetails中
+        String mobileNumber = (String) userInfo.get("mobile_number");
+        logger.debug("User {} loaded with mobile number: {}", username, mobileNumber != null ? mobileNumber.substring(0, 3) + "****" : null);
+
         return new CustomUserDetails(
                 username,
                 (String) userInfo.get("password"),
                 userInfo.get("enabled") != null && (Boolean) userInfo.get("enabled"),
+                true, // accountNonExpired
+                true, // credentialsNonExpired  
+                true, // accountNonLocked
                 grantedAuthorities,
+                Collections.emptyMap(), // additionalDetails
                 groups,
+                mobileNumber, // 🔑 设置手机号到phoneNumber字段
                 (Boolean) userInfo.get("password_change_required"),
                 passwordLastChanged,
                 (Boolean) userInfo.get("first_login")

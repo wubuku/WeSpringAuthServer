@@ -211,8 +211,45 @@ public class WeChatService {
             logger.debug("Adding WECHAT_MOBILE_TYPE identification for user: {}, mobileNumber: {}", username, mobileNumber);
             userIdentificationService.addUserIdentification(username, WECHAT_MOBILE_TYPE, mobileNumber, true, now);
             logger.debug("Successfully added WECHAT_MOBILE_TYPE identification for user: {}", username);
+            
+            // 🔑 重要：同时更新users表中的mobile_number字段，确保getUserDetails()能正确获取手机号
+            ensureUserMobileNumberUpdated(username, mobileNumber);
         } else {
             logger.debug("WECHAT_MOBILE_TYPE identification already exists for user: {}", username);
+            // 🔑 即使标识已存在，也要确保users表中的mobile_number字段正确设置
+            ensureUserMobileNumberUpdated(username, mobileNumber);
+        }
+    }
+
+    /**
+     * 确保users表中的mobile_number字段正确设置
+     * 这解决了已有用户首次授权手机号时，标识表有记录但users表mobile_number字段为空的问题
+     */
+    private void ensureUserMobileNumberUpdated(String username, String mobileNumber) {
+        if (mobileNumber == null || mobileNumber.trim().isEmpty()) {
+            return;
+        }
+        
+        try {
+            // 检查当前users表中的mobile_number字段
+            String currentMobileNumber = userService.getCurrentMobileNumber(username);
+            
+            if (currentMobileNumber == null || currentMobileNumber.trim().isEmpty()) {
+                // 如果users表中的手机号为空，更新它
+                userService.updateUserMobileNumber(username, mobileNumber);
+                logger.info("Updated mobile_number in users table for user: {}, mobileNumber: {}", 
+                           username, mobileNumber.substring(0, 3) + "****");
+            } else if (!mobileNumber.equals(currentMobileNumber)) {
+                // 如果手机号不一致，更新为最新的
+                userService.updateUserMobileNumber(username, mobileNumber);
+                logger.info("Updated mobile_number in users table for user: {} from {} to {}", 
+                           username, currentMobileNumber.substring(0, 3) + "****", mobileNumber.substring(0, 3) + "****");
+            } else {
+                logger.debug("Mobile number in users table is already correct for user: {}", username);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to update mobile_number in users table for user: {}", username, e);
+            // 不抛出异常，避免影响主要的登录流程
         }
     }
 
