@@ -13,6 +13,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -35,6 +37,15 @@ public class SecurityConfig {
     private UsernamePasswordAuthenticationProvider usernamePasswordAuthenticationProvider;
     @Autowired
     private AuthenticationSuccessHandler authenticationSuccessHandler;
+
+    /**
+     * 配置SessionRegistry - OIDC logout端点的必要依赖
+     * 用于跟踪用户的session信息，支持OpenID Connect logout功能
+     */
+    @Bean
+    public SessionRegistry sessionRegistry() {
+        return new SessionRegistryImpl();
+    }
 
     @Bean
     @Order(1)
@@ -80,7 +91,13 @@ public class SecurityConfig {
     @Order(3)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource))
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .sessionManagement(s -> s
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                        // 配置session并发控制，支持OIDC logout功能
+                        .maximumSessions(10)  // 每个用户最多10个并发session
+                        .sessionRegistry(sessionRegistry())  // 使用我们配置的SessionRegistry
+                        .and()
+                )
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/oauth2/**", "/sms/**", "/wechat/**"))
                 // 添加安全头配置，提升安全防护
                 .headers(headers -> headers

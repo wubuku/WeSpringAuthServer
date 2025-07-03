@@ -112,7 +112,7 @@ password:
 auth-server:
   issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8888,http://localhost:3000,http://127.0.0.1:3000,http://localhost:1023,https://al.u2511175.nyat.app:50518,https://kzmfqqizg6thf8n833hp.lite.vusercontent.net}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8888,http://localhost:3000,http://127.0.0.1:3000,http://localhost:1023,https://al.u2511175.nyat.app:50518,https://v0-beauty-consultant-ai-interface.vercel.app}
     allowed-methods: GET,POST,PUT,DELETE,OPTIONS
     allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,Origin,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-Dest
     allow-credentials: true
@@ -132,8 +132,11 @@ security:
 logging:
   level:
     root: ${LOG_LEVEL_ROOT:INFO}
-    org.springframework.security: ${LOG_LEVEL_SECURITY:INFO}
-    org.springframework.security.oauth2: ${LOG_LEVEL_OAUTH2:INFO}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:DEBUG}
+    org.springframework.security.oauth2: ${LOG_LEVEL_OAUTH2:DEBUG}
+    org.springframework.security.oauth2.server.authorization.oidc: DEBUG
+    org.springframework.security.web.authentication.logout: DEBUG
+    org.springframework.security.core.session: DEBUG
     org.springframework.web: ${LOG_LEVEL_WEB:INFO}
     org.dddml.ffvtraceability: ${LOG_LEVEL_APP:INFO}
 #   file:
