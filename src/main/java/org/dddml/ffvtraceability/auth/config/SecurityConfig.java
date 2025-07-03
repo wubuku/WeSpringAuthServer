@@ -107,6 +107,7 @@ public class SecurityConfig {
                                 "/favicon.ico",
                                 "/sms/**",
                                 "/wechat/**",
+                                "/demo/**",
                                 "/.well-known/**"
                         ).permitAll()
                         .requestMatchers("/user-management", "/auth-srv/user-management")

@@ -772,13 +772,21 @@
     <script>
         // 配置常量
         const CONFIG = {
-            // AUTH_SERVER_BASE_URL: 'http://localhost:9000',
-            AUTH_SERVER_BASE_URL: 'https://al.u2511175.nyat.app:50518',
+            // 🔥 Cookie安全模式配置 - 同域部署
+            AUTH_SERVER_BASE_URL: '',  // 空字符串表示同域，适配Spring静态资源服务
+            // AUTH_SERVER_BASE_URL: 'http://localhost:9000',  // 跨域模式（需CORS配置）
+            
             CLIENT_ID: 'ffv-client',
-            CLIENT_SECRET: 'secret',
+            
+            // 🔒 安全：Cookie模式下不需要客户端存储client_secret
+            // CLIENT_SECRET: 'secret',  // ← 已移除，由后端管理
+            
+            // 🍪 启用Cookie安全模式
+            COOKIE_MODE: true,
+            
             STORAGE_KEYS: {
                 ACCESS_TOKEN: 'sms_access_token',
-                REFRESH_TOKEN: 'sms_refresh_token',
+                // REFRESH_TOKEN: 'sms_refresh_token', // ← Cookie模式下不再需要
                 TOKEN_EXPIRY: 'sms_token_expiry',
                 USER_INFO: 'sms_user_info'
             }
@@ -797,15 +805,21 @@
                 const expiryTime = now + (expiresIn * 1000);
                 
                 localStorage.setItem(CONFIG.STORAGE_KEYS.ACCESS_TOKEN, accessToken);
-                localStorage.setItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
                 localStorage.setItem(CONFIG.STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
+                
+                // 🍪 Cookie模式下不存储refresh_token到localStorage
+                if (!CONFIG.COOKIE_MODE && refreshToken) {
+                    localStorage.setItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+                }
                 
                 this.setupAutoRefresh();
                 this.updateTokenDisplay();
                 
                 console.log('Tokens stored successfully', {
+                    cookieMode: CONFIG.COOKIE_MODE,
                     expiresIn: expiresIn,
-                    expiryTime: new Date(expiryTime)
+                    expiryTime: new Date(expiryTime),
+                    refreshTokenStored: !CONFIG.COOKIE_MODE ? 'localStorage' : 'HttpOnly Cookie'
                 });
             }
 
@@ -816,6 +830,11 @@
 
             // 获取refresh token
             getRefreshToken() {
+                // 🍪 Cookie模式：refresh_token存储在HttpOnly Cookie中，前端无法直接访问
+                if (CONFIG.COOKIE_MODE) {
+                    // Cookie模式下，refresh_token由后端自动管理，前端不需要获取
+                    return 'cookie_managed';
+                }
                 return localStorage.getItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
             }
 
@@ -838,37 +857,54 @@
             // 清除token
             clearTokens() {
                 localStorage.removeItem(CONFIG.STORAGE_KEYS.ACCESS_TOKEN);
-                localStorage.removeItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
                 localStorage.removeItem(CONFIG.STORAGE_KEYS.TOKEN_EXPIRY);
                 localStorage.removeItem(CONFIG.STORAGE_KEYS.USER_INFO);
+                
+                // 🍪 Cookie模式下不清除localStorage中的refresh_token（因为没有存储）
+                if (!CONFIG.COOKIE_MODE) {
+                    localStorage.removeItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
+                }
                 
                 if (this.autoRefreshTimer) {
                     clearTimeout(this.autoRefreshTimer);
                 }
                 
                 this.updateTokenDisplay();
+                console.log('Tokens cleared', { cookieMode: CONFIG.COOKIE_MODE });
             }
 
             // 刷新token
             async refreshToken() {
                 const refreshToken = this.getRefreshToken();
-                if (!refreshToken) {
+                if (!refreshToken && !CONFIG.COOKIE_MODE) {
                     throw new Error('No refresh token available');
                 }
 
                 try {
-                    const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/refresh-token`, {
+                    // 🍪 Cookie模式下的请求配置
+                    const requestConfig = {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
                         },
-                        body: new URLSearchParams({
-                            grant_type: 'refresh_token',
-                            refresh_token: refreshToken,
-                            client_id: CONFIG.CLIENT_ID,
-                            client_secret: CONFIG.CLIENT_SECRET
-                        })
+                        credentials: 'include' // 🍪 必须包含Cookie
+                    };
+
+                    // 构建请求体参数
+                    const params = new URLSearchParams({
+                        grant_type: 'refresh_token',
+                        client_id: CONFIG.CLIENT_ID
                     });
+
+                    // 🔒 Cookie模式下不需要传递refresh_token和client_secret
+                    if (!CONFIG.COOKIE_MODE) {
+                        params.append('refresh_token', refreshToken);
+                        params.append('client_secret', CONFIG.CLIENT_SECRET);
+                    }
+
+                    requestConfig.body = params;
+
+                    const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/refresh-token`, requestConfig);
 
                     if (!response.ok) {
                         const errorData = await response.json();
@@ -878,7 +914,7 @@
                     const data = await response.json();
                     this.storeTokens(data.access_token, data.refresh_token, data.expires_in);
                     
-                    console.log('Token refreshed successfully');
+                    console.log('Token refreshed successfully', { cookieMode: CONFIG.COOKIE_MODE });
                     return data.access_token;
                 } catch (error) {
                     console.error('Token refresh failed:', error);
@@ -912,30 +948,46 @@
                         
                         // 检查refresh token
                         const refreshToken = this.getRefreshToken();
-                        if (!refreshToken) {
+                        if (!refreshToken && !CONFIG.COOKIE_MODE) {
                             addLog('❌ 错误：未找到refresh token', 'error');
                             reject(new Error('No refresh token available'));
                             return;
                         }
                         
-                        addLog(`✅ 找到refresh token: ${refreshToken.substring(0, 20)}...`, 'info');
+                        if (CONFIG.COOKIE_MODE) {
+                            addLog('🍪 Cookie安全模式：refresh_token由HttpOnly Cookie管理', 'info');
+                        } else {
+                            addLog(`✅ 找到refresh token: ${refreshToken.substring(0, 20)}...`, 'info');
+                        }
                         addLog('📤 正在发送刷新请求到认证服务器...', 'info');
 
                         // 模拟网络延迟以便观察过程
                         await new Promise(resolve => setTimeout(resolve, 500));
 
-                        const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/refresh-token`, {
+                        // 🍪 Cookie模式下的请求配置
+                        const requestConfig = {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',
                             },
-                            body: new URLSearchParams({
-                                grant_type: 'refresh_token',
-                                refresh_token: refreshToken,
-                                client_id: CONFIG.CLIENT_ID,
-                                client_secret: CONFIG.CLIENT_SECRET
-                            })
+                            credentials: 'include' // 🍪 必须包含Cookie
+                        };
+
+                        // 构建请求体参数
+                        const params = new URLSearchParams({
+                            grant_type: 'refresh_token',
+                            client_id: CONFIG.CLIENT_ID
                         });
+
+                        // 🔒 Cookie模式下不需要传递refresh_token和client_secret
+                        if (!CONFIG.COOKIE_MODE) {
+                            params.append('refresh_token', refreshToken);
+                            params.append('client_secret', CONFIG.CLIENT_SECRET);
+                        }
+
+                        requestConfig.body = params;
+
+                        const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/refresh-token`, requestConfig);
 
                         addLog(`📥 收到服务器响应，状态码: ${response.status}`, 'info');
 
@@ -950,7 +1002,13 @@
                         const data = await response.json();
                         addLog('✅ 成功解析响应数据', 'success');
                         addLog(`🔑 新的Access Token: ${data.access_token.substring(0, 30)}...`, 'info');
-                        addLog(`🔑 新的Refresh Token: ${data.refresh_token.substring(0, 30)}...`, 'info');
+                        
+                        if (CONFIG.COOKIE_MODE) {
+                            addLog('🍪 新的Refresh Token已安全存储在HttpOnly Cookie中', 'info');
+                        } else {
+                            addLog(`🔑 新的Refresh Token: ${data.refresh_token.substring(0, 30)}...`, 'info');
+                        }
+                        
                         addLog(`⏰ Token有效期: ${data.expires_in}秒`, 'info');
 
                         // 存储新的tokens
@@ -1089,12 +1147,13 @@
                 try {
                     showLoading('loginBtn', '登录中...');
 
-                    const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/auth?` + new URLSearchParams({
+                    const response = await fetch(`${CONFIG.AUTH_SERVER_BASE_URL}/sms/login?` + new URLSearchParams({
                         mobileNumber: phoneNumber,
                         verificationCode: verificationCode,
                         clientId: CONFIG.CLIENT_ID
                     }), {
-                        method: 'GET'
+                        method: 'GET',
+                        credentials: 'include' // 🍪 Cookie模式下必须包含
                     });
 
                     if (response.ok) {
