@@ -81,13 +81,19 @@ spring:
         issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
 
 # OAuth2安全增强配置 - 方案A：子域名共享Cookie
+# 要点: 通过HttpOnly Cookie安全地在不同子域名（如 a.example.com 和 b.example.com）之间共享 refresh_token。
+# 关键是正确设置 domain 属性为父域名（注意前面的点, 如 .example.com）。
 oauth2:
   # Cookie安全配置
   cookie:
-    domain: ${OAUTH2_COOKIE_DOMAIN:}                     # 开发环境: 空(不设置), 生产环境: .company.com
-    secure: ${OAUTH2_COOKIE_SECURE:false}                # 开发环境: false, 生产环境: true (需要HTTPS)
-    same-site: ${OAUTH2_COOKIE_SAME_SITE:Lax}           # Lax 允许同站跨子域
-    max-age: ${OAUTH2_COOKIE_MAX_AGE:2592000}            # 30天 (30 * 24 * 60 * 60)
+    # 【核心】设置父域名以允许子域名共享。生产环境必须设置为 .your-domain.com 格式。开发环境可留空。
+    domain: ${OAUTH2_COOKIE_DOMAIN:}
+    # 【安全】生产环境强制为 true，确保Cookie仅通过HTTPS传输。
+    secure: ${OAUTH2_COOKIE_SECURE:false}
+    # 【策略】Lax为默认值，适用于多数同站场景。如需支持跨站POST请求，设为None（此时secure必须为true）。
+    same-site: ${OAUTH2_COOKIE_SAME_SITE:Lax}
+    # 【有效期】Cookie的有效时间（秒），默认30天。
+    max-age: ${OAUTH2_COOKIE_MAX_AGE:2592000}
     
   # 注意：客户端配置统一在数据库中管理（RegisteredClientRepository）
   # 不在此处重复配置，避免数据不一致
