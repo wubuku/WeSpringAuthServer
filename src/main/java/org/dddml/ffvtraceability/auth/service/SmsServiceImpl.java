@@ -57,10 +57,16 @@ public class SmsServiceImpl implements SmsService {
         }
 
         // Now send the SMS - if this fails, the verification code is still valid in DB
+        // NOTE: Return true because verification code is saved - user can still use it for login even if SMS failed
+        // Is this acceptable???
         try {
             logger.info("Attempting to send SMS via provider: {}", smsProvider.getProviderName());
-            smsProvider.sendVerificationCode(mobileNumber, code);
-            logger.info("Successfully sent SMS via provider: {}", smsProvider.getProviderName());
+            boolean sent = smsProvider.sendVerificationCode(mobileNumber, code);
+            if (sent) {
+                logger.info("Successfully sent SMS via provider: {}", smsProvider.getProviderName());
+            } else {
+                logger.info("Failed to send SMS via provider: {}", smsProvider.getProviderName());
+            }
             smsVerificationService.recordSendAttempt(mobileNumber, smsProvider.getProviderName(), true, "SMS sent successfully");
             return true;
         } catch (Exception e) {
@@ -70,7 +76,6 @@ public class SmsServiceImpl implements SmsService {
             } catch (Exception ignored) {
                 // Ignore
             }
-            // Return true because verification code is saved - user can still use it for login even if SMS failed
             logger.info("Verification code saved to database even though SMS sending failed. User can still use the code for login.");
             return true;
         }
