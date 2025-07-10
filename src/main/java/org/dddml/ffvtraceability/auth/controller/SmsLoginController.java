@@ -25,18 +25,18 @@ import java.util.Map;
 /**
  * SMS登录控制器 - 专为微信小程序等移动端设计
  * 提供无状态的SMS验证码服务，返回OAuth2 token
- * 
+ * <p>
  * 注意：此控制器的所有端点都是无状态的，适用于：
  * - 微信小程序
  * - 移动APP
  * - 第三方API调用
  * - Web应用的无状态登录
- * 
+ * <p>
  * 🔒 安全升级 (2024-01-XX)：
  * - 实现HttpOnly Cookie存储refresh_token
  * - 移除前端client_secret传输
  * - 后端统一管理OAuth2客户端凭据
- * 
+ * <p>
  * 不要在此控制器中添加需要session的端点！
  */
 @RestController
@@ -62,15 +62,19 @@ public class SmsLoginController {
 
     /**
      * 发送SMS验证码 - JSON格式 (新的微信小程序使用)
-     * JSON格式: {"phoneNumber": "13800138000"}
+     * JSON格式: {"mobileNumber": "13800138000"}
      */
     @PostMapping(value = "/send-code", consumes = "application/json")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> sendSmsCodeJson(@RequestBody Map<String, String> request) {
-        String mobileNumber = request.get("phoneNumber");
+        String mobileNumber = request.get("mobileNumber");
+        if (mobileNumber == null && request.containsKey("phoneNumber")) {
+            //兼容 `{"mobileNumber": "13800138000"}`
+            mobileNumber = request.get("phoneNumber");
+        }
         return processSmsCodeRequest(mobileNumber);
     }
-    
+
     /**
      * 发送SMS验证码 - Form格式 (原有测试脚本使用)
      * Form格式: mobileNumber=13800138000
@@ -80,7 +84,7 @@ public class SmsLoginController {
     public ResponseEntity<Map<String, Object>> sendSmsCodeForm(@RequestParam("mobileNumber") String mobileNumber) {
         return processSmsCodeRequest(mobileNumber);
     }
-    
+
     /**
      * 发送SMS验证码 - GET方法 (为了兼容性支持)
      * 虽然不是典型的REST实践，但为了兼容某些客户端需求
@@ -91,13 +95,13 @@ public class SmsLoginController {
     public ResponseEntity<Map<String, Object>> sendSmsCodeGet(@RequestParam("mobileNumber") String mobileNumber) {
         return processSmsCodeRequest(mobileNumber);
     }
-    
+
     /**
      * 处理SMS验证码发送的通用逻辑
      */
     private ResponseEntity<Map<String, Object>> processSmsCodeRequest(String mobileNumber) {
         Map<String, Object> response = new HashMap<>();
-        
+
         if (mobileNumber == null || mobileNumber.isEmpty()) {
             response.put("success", false);
             response.put("message", "Mobile number is required");
@@ -131,7 +135,7 @@ public class SmsLoginController {
     /**
      * SMS登录认证 - 微信小程序使用
      * 无状态API，返回OAuth2 access_token和refresh_token
-     * 
+     * <p>
      * 🔒 安全升级：成功登录时设置HttpOnly Cookie存储refresh_token
      */
     @GetMapping("/auth")
@@ -166,7 +170,7 @@ public class SmsLoginController {
     /**
      * SMS登录认证 - Web端使用
      * 无状态API，返回OAuth2 access_token和refresh_token
-     * 
+     * <p>
      * 🔒 安全升级：成功登录时设置HttpOnly Cookie存储refresh_token
      */
     @GetMapping("/login")
@@ -181,7 +185,7 @@ public class SmsLoginController {
 
     /**
      * 刷新Token端点 - 统一的OAuth2 refresh token处理
-     * 
+     * <p>
      * 🔒 安全升级 (2024-01-XX)：
      * - 从HttpOnly Cookie读取refresh_token，不再从请求参数获取
      * - 从后端配置获取client_secret，不再从前端传输
@@ -195,28 +199,28 @@ public class SmsLoginController {
             @RequestParam(value = "client_id", defaultValue = DEFAULT_CLIENT_ID) String clientId,
             HttpServletRequest request,
             HttpServletResponse response) {
-        
+
         logger.info("🔄 处理refresh-token请求 - ClientId: {}, GrantType: {}", clientId, grantType);
-        
+
         try {
             // 🔒 安全升级：优先从Cookie读取refresh_token
             logger.debug("🍪 尝试从Cookie读取refresh_token...");
             String refreshTokenValue = cookieSecurityConfig.getRefreshTokenFromCookie(request);
-            
-            logger.info("🍪 Cookie中的refresh_token: {}", 
-                       refreshTokenValue != null ? (refreshTokenValue.substring(0, Math.min(20, refreshTokenValue.length())) + "...") : "null");
-            
+
+            logger.info("🍪 Cookie中的refresh_token: {}",
+                    refreshTokenValue != null ? (refreshTokenValue.substring(0, Math.min(20, refreshTokenValue.length())) + "...") : "null");
+
             if (refreshTokenValue == null && refreshTokenFromParam != null) {
                 // 向后兼容：如果Cookie中没有，尝试从参数获取
                 refreshTokenValue = refreshTokenFromParam;
-                logger.warn("⚠️  使用参数中的refresh_token作为后备方案: {}...", 
-                           refreshTokenFromParam.substring(0, Math.min(20, refreshTokenFromParam.length())));
+                logger.warn("⚠️  使用参数中的refresh_token作为后备方案: {}...",
+                        refreshTokenFromParam.substring(0, Math.min(20, refreshTokenFromParam.length())));
                 logger.warn("Consider upgrading client to use Cookie-based authentication.");
             }
-            
+
             if (refreshTokenValue == null) {
-                logger.error("❌ 无法获取refresh_token - Cookie: null, Parameter: {}", 
-                           refreshTokenFromParam != null ? (refreshTokenFromParam.substring(0, Math.min(10, refreshTokenFromParam.length())) + "...") : "null");
+                logger.error("❌ 无法获取refresh_token - Cookie: null, Parameter: {}",
+                        refreshTokenFromParam != null ? (refreshTokenFromParam.substring(0, Math.min(10, refreshTokenFromParam.length())) + "...") : "null");
             }
 
             // 🔒 安全升级：从后端配置获取client_secret
@@ -228,20 +232,20 @@ public class SmsLoginController {
                 errorResponse.put("error_description", "Client authentication failed");
                 return ResponseEntity.status(401).body(errorResponse);
             }
-            
+
             logger.debug("✅ Client secret retrieved for client: {}", clientId);
 
             // 🔒 安全升级：使用Cookie安全模式，不在响应中暴露refresh_token
             ResponseEntity<Map<String, Object>> result = oAuth2AuthenticationHelper.processRefreshToken(
-                grantType, refreshTokenValue, clientId, clientSecret, request, true);
+                    grantType, refreshTokenValue, clientId, clientSecret, request, true);
 
             // 🔒 安全升级：如果刷新成功，从header读取新的refresh_token并更新Cookie
             if (result.getStatusCode().is2xxSuccessful()) {
                 String newRefreshToken = result.getHeaders().getFirst("X-New-Refresh-Token");
                 if (newRefreshToken != null) {
                     cookieSecurityConfig.setRefreshTokenCookie(response, newRefreshToken);
-                    logger.info("✅ Updated HttpOnly Cookie with new refresh_token: {}...", 
-                               newRefreshToken.substring(0, Math.min(20, newRefreshToken.length())));
+                    logger.info("✅ Updated HttpOnly Cookie with new refresh_token: {}...",
+                            newRefreshToken.substring(0, Math.min(20, newRefreshToken.length())));
                 } else {
                     logger.warn("⚠️  No new refresh_token found in response header for Cookie update");
                 }
