@@ -27,6 +27,10 @@ spring:
     init:
       mode: ${SQL_INIT_MODE:always}
       continue-on-error: false
+      schema-locations:
+        - classpath:schema.sql
+      data-locations:
+        - classpath:data-base.sql
 
   jpa:
     show-sql: false
@@ -118,7 +122,7 @@ password:
 auth-server:
   issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8888,http://localhost:3000,http://127.0.0.1:3000,http://localhost:1023,https://al.u2511175.nyat.app:50518,https://v0-beauty-consultant-ai-interface.vercel.app,https://kzmjq05ormpml1bob042.lite.vusercontent.net}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8888,http://localhost:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:1023,https://al.u2511175.nyat.app:50518,https://v0-beauty-consultant-ai-interface.vercel.app,https://kzmjq05ormpml1bob042.lite.vusercontent.net,https://shimmer-shell-auth.lovable.app}
     allowed-methods: GET,POST,PUT,DELETE,OPTIONS
     allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,Origin,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-Dest
     allow-credentials: true

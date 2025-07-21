@@ -64,11 +64,12 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain webApiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/**", "/auth-srv/**", "/web-sms/**")  // Web管理界面API + 旧API路径
+                .securityMatcher("/api/**", "/auth-srv/**", "/web-sms/**", "/dev-tools/**")  // Web管理界面API + 旧API路径 + 开发工具
                 .csrf(c -> c.disable())  // API禁用CSRF，因为前端会通过headers发送token
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))  // 支持session
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/web-sms/**").permitAll()  // Web SMS验证端点
+                        .requestMatchers("/dev-tools/**").permitAll()  // 开发工具端点（仅dev profile启用）
                         // 新API路径 (/api/**) 权限配置
                         .requestMatchers("/api/users/**").hasAuthority("ROLE_ADMIN") // "Users_Read")
                         .requestMatchers("/api/groups/**").hasAuthority("ROLE_ADMIN") // "Roles_Read")
@@ -98,7 +99,7 @@ public class SecurityConfig {
                         .sessionRegistry(sessionRegistry())  // 使用我们配置的SessionRegistry
                         .and()
                 )
-                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/oauth2/**", "/sms/**", "/wechat/**"))
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/oauth2/**", "/sms/**", "/wechat/**", "/dev-tools/**"))
                 // 添加安全头配置，提升安全防护
                 .headers(headers -> headers
                         .frameOptions().deny()  // 防止点击劫持
@@ -125,7 +126,8 @@ public class SecurityConfig {
                                 "/sms/**",
                                 "/wechat/**",
                                 "/demo/**",
-                                "/.well-known/**"
+                                "/.well-known/**",
+                                "/dev-tools/**"  // 开发工具端点（仅dev profile启用）
                         ).permitAll()
                         .requestMatchers("/user-management", "/auth-srv/user-management")
                         .hasAuthority("Users_Read")
