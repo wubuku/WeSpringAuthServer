@@ -45,6 +45,7 @@ import java.security.cert.Certificate;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -93,7 +94,12 @@ public class AuthorizationServerConfig {
         CorsConfiguration configuration = new CorsConfiguration();
 
         String[] origins = authServerProperties.getCors().getAllowedOrigins().split(",");
-        configuration.setAllowedOriginPatterns(Arrays.asList(origins));
+        // 重要：trim()去除空格，避免YAML多行配置导致的空格问题
+        List<String> trimmedOrigins = Arrays.stream(origins)
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .collect(Collectors.toList());
+        configuration.setAllowedOriginPatterns(trimmedOrigins);
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 

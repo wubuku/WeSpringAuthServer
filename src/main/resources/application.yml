@@ -1,28 +1,47 @@
+# =============================================================================
+# WeSpring Auth Server - 通用配置文件
+# =============================================================================
+# 这是一个通用的OAuth2授权服务器配置，适用于任何项目
+# 特定项目的配置请在 application-dev.yml 中定义
+# 生产环境配置请在 application-prod.yml 中定义，并通过环境变量覆盖敏感信息
+# =============================================================================
+
+# 服务器基础配置
 server:
   port: ${SERVER_PORT:9000}
   error:
+    # 生产环境安全配置：不暴露敏感错误信息
     include-message: never
     include-binding-errors: never
     include-stacktrace: never
     include-exception: false
   servlet:
     context-path: /
+
+# Spring Boot 基础配置
 spring:
   application:
-    name: ffvtraceability-auth-server
+    # 应用名称，可通过环境变量覆盖
+    name: ${SPRING_APPLICATION_NAME:wespring-auth-server}
+  
   profiles:
-    active: dev
+    # 默认激活开发环境配置
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  
+  # 数据库连接配置
   datasource:
-    url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5432}/${DB_NAME:ffvtraceability}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:authserver}
     username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:123456}
+    password: ${DB_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
     hikari:
+      # 连接池配置
       maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
       minimum-idle: ${DB_MIN_IDLE:5}
       idle-timeout: 300000
       connection-timeout: 20000
 
+  # SQL初始化配置
   sql:
     init:
       mode: ${SQL_INIT_MODE:always}
@@ -32,12 +51,14 @@ spring:
       data-locations:
         - classpath:data-base.sql
 
+  # JPA配置
   jpa:
     show-sql: false
     properties:
       hibernate:
         format_sql: false
 
+  # Session存储配置 - 使用JDBC存储以支持集群部署
   session:
     store-type: jdbc
     jdbc:
@@ -46,27 +67,15 @@ spring:
       table-name: SPRING_SESSION
     timeout: 30m
 
-#  mail:
-#    host: smtp.qq.com  # 邮件服务器地址
-#    port: 587            # 端口号
-#    username: 8745138@qq.com
-#    password: izzrlktcijgfcabb  # 邮箱授权码
-#    properties:
-#      mail:
-#        smtp:
-#          auth: true
-#          starttls:
-#            enable: true
-#            required: true
-
+  # 邮件服务配置 - 用于密码重置等功能
   mail:
-    host: smtp.gmail.com  # 邮件服务器地址
-    port: 587            # 端口号
-    username: whilliy@gmail.com
-    password: nchplogyhbumjgyc
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:your-email@gmail.com}
+    password: ${MAIL_PASSWORD:your-app-password}
     properties:
       mail:
-        debug: true
+        debug: ${MAIL_DEBUG:false}
         smtp:
           connection-timeout: 30000
           timeout: 30000
@@ -76,32 +85,35 @@ spring:
             enable: true
             required: true
           ssl:
-            trust: smtp.gmail.com # 强制信任证书
+            trust: ${MAIL_HOST:smtp.gmail.com}
 
-  #给AuthorizationServerSettings设置issuer
+  # OAuth2授权服务器配置
   security:
     oauth2:
       authorization-server:
         issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
 
-# OAuth2安全增强配置 - 方案A：子域名共享Cookie
-# 要点: 通过HttpOnly Cookie安全地在不同子域名（如 a.example.com 和 b.example.com）之间共享 refresh_token。
-# 关键是正确设置 domain 属性为父域名（注意前面的点, 如 .example.com）。
+# =============================================================================
+# OAuth2 安全增强配置
+# =============================================================================
+# 支持HttpOnly Cookie模式，提供企业级安全保障
+# 支持子域名共享Cookie，适用于微服务架构
+# =============================================================================
 oauth2:
   # Cookie安全配置
   cookie:
-    # 【核心】设置父域名以允许子域名共享。生产环境必须设置为 .your-domain.com 格式。开发环境可留空。
+    # 【核心】设置父域名以允许子域名共享
+    # 生产环境格式：.your-domain.com，开发环境可留空
     domain: ${OAUTH2_COOKIE_DOMAIN:}
-    # 【安全】生产环境强制为 true，确保Cookie仅通过HTTPS传输。
+    # 【安全】生产环境强制为true，确保Cookie仅通过HTTPS传输
     secure: ${OAUTH2_COOKIE_SECURE:false}
-    # 【策略】Lax为默认值，适用于多数同站场景。如需支持跨站POST请求，设为None（此时secure必须为true）。
+    # 【策略】Cookie的SameSite策略
+    # Lax: 适用于多数同站场景
+    # None: 支持跨站POST请求（需secure=true）
     same-site: ${OAUTH2_COOKIE_SAME_SITE:Lax}
-    # 【有效期】Cookie的有效时间（秒），默认30天。
+    # 【有效期】Cookie的有效时间（秒），默认30天
     max-age: ${OAUTH2_COOKIE_MAX_AGE:2592000}
     
-  # 注意：客户端配置统一在数据库中管理（RegisteredClientRepository）
-  # 不在此处重复配置，避免数据不一致
-      
   # 安全策略配置
   security:
     # 是否启用HttpOnly Cookie模式
@@ -111,76 +123,123 @@ oauth2:
     # refresh_token存储策略: cookie | backend | hybrid
     refresh-token-strategy: ${OAUTH2_REFRESH_TOKEN_STRATEGY:cookie}
 
-
+# =============================================================================
+# 密码重置令牌配置
+# =============================================================================
 password:
   token:
-    create-password-url: https://fp.ablueforce.com/change-password
-    expire-in-hours: 24
+    # 密码重置页面URL，需要根据实际前端地址配置
+    create-password-url: ${PASSWORD_RESET_URL:http://localhost:3000/reset-password}
+    # 密码重置令牌有效期（小时）
+    expire-in-hours: ${PASSWORD_TOKEN_EXPIRE_HOURS:24}
 
-
-# OAuth2 授权服务器配置
+# =============================================================================
+# 授权服务器扩展配置
+# =============================================================================
 auth-server:
+  # 授权服务器的issuer URL
   issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
+  
+  # CORS跨域配置
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8888,http://localhost:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:1023,https://al.u2511175.nyat.app:50518,https://v0-beauty-consultant-ai-interface.vercel.app,https://kzmjq05ormpml1bob042.lite.vusercontent.net,https://shimmer-shell-auth.lovable.app}
-    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
-    allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,Origin,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-Dest
-    allow-credentials: true
+    # 允许的源地址，生产环境需要严格限制
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080}
+    # 允许的HTTP方法
+    allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,DELETE,OPTIONS}
+    # 允许的请求头
+    allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,Accept,X-Requested-With,Origin}
+    # 是否允许携带凭证
+    allow-credentials: ${CORS_ALLOW_CREDENTIALS:true}
+  
+  # Web客户端配置（用于特殊的Web令牌端点）
   web-clients:
-    allowed-client-ids: ${WEB_CLIENT_IDS:ffv-client,other-web-client}
-    client-secrets: ${WEB_CLIENT_SECRETS:secret,other-secret}
+    # 允许的客户端ID列表
+    allowed-client-ids: ${WEB_CLIENT_IDS:web-client}
+    # 对应的客户端密钥列表
+    client-secrets: ${WEB_CLIENT_SECRETS:web-secret}
 
-# 安全配置
+# =============================================================================
+# JWT密钥配置
+# =============================================================================
 security:
   jwt:
+    # JWT签名密钥库路径
     key-store: ${JWT_KEYSTORE_PATH:classpath:keys/jwt-signing-keys.jks}
-    key-store-password: ${JWT_KEYSTORE_PASSWORD:ffvtraceability}
+    # 密钥库密码（生产环境必须通过环境变量设置）
+    key-store-password: ${JWT_KEYSTORE_PASSWORD:changeme}
+    # 密钥别名
     key-alias: ${JWT_KEY_ALIAS:jwt-signing-key}
-    private-key-passphrase: ${JWT_KEY_PASSWORD:ffvtraceability}
+    # 私钥密码（生产环境必须通过环境变量设置）
+    private-key-passphrase: ${JWT_KEY_PASSWORD:changeme}
 
+# =============================================================================
 # 日志配置
+# =============================================================================
 logging:
   level:
     root: ${LOG_LEVEL_ROOT:INFO}
-    org.springframework.security: ${LOG_LEVEL_SECURITY:DEBUG}
-    org.springframework.security.oauth2: ${LOG_LEVEL_OAUTH2:DEBUG}
-    org.springframework.security.oauth2.server.authorization.oidc: DEBUG
-    org.springframework.security.web.authentication.logout: DEBUG
-    org.springframework.security.core.session: DEBUG
+    org.springframework.security: ${LOG_LEVEL_SECURITY:INFO}
+    org.springframework.security.oauth2: ${LOG_LEVEL_OAUTH2:INFO}
+    org.springframework.security.oauth2.server.authorization.oidc: ${LOG_LEVEL_OIDC:INFO}
+    org.springframework.security.web.authentication.logout: ${LOG_LEVEL_LOGOUT:INFO}
+    org.springframework.security.core.session: ${LOG_LEVEL_SESSION:INFO}
     org.springframework.web: ${LOG_LEVEL_WEB:INFO}
+    # 应用日志级别，可通过环境变量覆盖
     org.dddml.ffvtraceability: ${LOG_LEVEL_APP:INFO}
-#   file:
-#     name: ${LOG_FILE_PATH:/var/log/ffvtraceability/auth-server.log}
-#   pattern:
-#     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-#     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  # 生产环境日志文件配置
+  file:
+    name: ${LOG_FILE_PATH:/var/log/auth-server/auth-server.log}
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
+# =============================================================================
+# 认证状态加密配置
+# =============================================================================
 auth:
   state:
     encryption:
-      password: "your-strong-password-here"
-      salt: "5c0744940b5c369b"  # 16位十六进制值
+      # 加密密码（生产环境必须通过环境变量设置强密码）
+      password: ${AUTH_STATE_PASSWORD:your-strong-password-here}
+      # 加密盐值（生产环境必须通过环境变量设置）
+      salt: ${AUTH_STATE_SALT:5c0744940b5c369b}
 
+# =============================================================================
 # 微信登录配置
+# =============================================================================
 wechat:
   mp:
+    # 微信小程序AppID
     app-id: ${WECHAT_APP_ID:YOUR_APP_ID}
+    # 微信小程序AppSecret（生产环境必须通过环境变量设置）
     app-secret: ${WECHAT_APP_SECRET:YOUR_APP_SECRET}
+    # 微信消息验证Token
     token: ${WECHAT_TOKEN:your-token}
+    # 微信消息加解密Key
     aes-key: ${WECHAT_AES_KEY:your-aes-key}
-    redirect-uri: ${WECHAT_REDIRECT_URI:http://192.168.0.103:9000/wechat/callback}
+    # 微信授权回调地址
+    redirect-uri: ${WECHAT_REDIRECT_URI:http://localhost:9000/wechat/callback}
 
+# =============================================================================
 # 短信服务配置
+# =============================================================================
 sms:
-  provider: ${SMS_PROVIDER:huoshan}
-  code-length: 6
-  code-expiration-minutes: 5
+  # 短信服务提供商：simulator | aliyun | huoshan
+  provider: ${SMS_PROVIDER:simulator}
+  # 验证码长度
+  code-length: ${SMS_CODE_LENGTH:6}
+  # 验证码有效期（分钟）
+  code-expiration-minutes: ${SMS_CODE_EXPIRATION:5}
+  
+  # 阿里云短信配置
   aliyun:
-    access-key-id: ${SMS_ACCESS_KEY_ID:your-access-key-id}
-    access-key-secret: ${SMS_ACCESS_KEY_SECRET:your-access-key-secret}
-    sign-name: ${SMS_SIGN_NAME:your-sign-name}
-    template-code: ${SMS_TEMPLATE_CODE:your-template-code}
-    region: ${SMS_REGION:cn-hangzhou}
+    access-key-id: ${ALIYUN_SMS_ACCESS_KEY_ID:your-access-key-id}
+    access-key-secret: ${ALIYUN_SMS_ACCESS_KEY_SECRET:your-access-key-secret}
+    sign-name: ${ALIYUN_SMS_SIGN_NAME:your-sign-name}
+    template-code: ${ALIYUN_SMS_TEMPLATE_CODE:your-template-code}
+    region: ${ALIYUN_SMS_REGION:cn-hangzhou}
+  
+  # 火山引擎短信配置
   huoshan:
     access-key-id: ${HUOSHAN_SMS_ACCESS_KEY_ID:your-access-key-id}
     secret-key: ${HUOSHAN_SMS_SECRET_KEY:your-secret-key}

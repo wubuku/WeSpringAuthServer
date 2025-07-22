@@ -1,9 +1,18 @@
+# =============================================================================
+# WeSpring Auth Server - 开发环境配置
+# =============================================================================
+# 这里包含特定项目的开发配置和敏感信息
+# 生产环境请勿使用此配置文件
+# =============================================================================
+
 spring:
   application:
+    # 项目特定的应用名称
     name: ffvtraceability-auth-server
 
+  # 开发环境数据库配置
   datasource:
-    url: jdbc:postgresql://127.0.0.1/${DB_NAME:ffvtraceability}
+    url: jdbc:postgresql://127.0.0.1:5432/ffvtraceability
     username: postgres
     password: 123456
     driver-class-name: org.postgresql.Driver
@@ -13,6 +22,7 @@ spring:
       idle-timeout: 300000
       connection-timeout: 20000
 
+  # 开发环境SQL初始化配置
   sql:
     init:
       mode: always
@@ -23,12 +33,34 @@ spring:
         - classpath:data-base.sql
         - classpath:data-dev.sql
 
+  # 开发环境JPA配置 - 启用SQL日志
   jpa:
     show-sql: true
     properties:
       hibernate:
         format_sql: true
 
+  # 开发环境邮件配置 - 使用项目特定的Gmail账户
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: whilliy@gmail.com
+    password: nchplogyhbumjgyc
+    properties:
+      mail:
+        debug: true
+        smtp:
+          connection-timeout: 30000
+          timeout: 30000
+          write-timeout: 30000
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            trust: smtp.gmail.com
+
+# 开发环境服务器配置 - 显示详细错误信息
 server:
   error:
     include-message: always
@@ -36,21 +68,21 @@ server:
     include-stacktrace: always
     include-exception: true
 
+# 项目特定的密码重置配置
 password:
   token:
     create-password-url: https://fp.ablueforce.com/change-password
     expire-in-hours: 24
-# 添加 JWT 密钥配置
+
+# 开发环境JWT密钥配置
 security:
   jwt:
     key-store: classpath:keys/jwt-signing-keys.jks
     key-store-password: ffvtraceability
     key-alias: jwt-signing-key
     private-key-passphrase: ffvtraceability
-    # 考虑使用环境变量来传递密码：
-    #key-store-password: ${JWT_KEYSTORE_PASSWORD:ffvtraceability}
-    #private-key-passphrase: ${JWT_KEY_PASSWORD:ffvtraceability}
 
+# 开发环境日志配置 - 启用详细日志
 logging:
   level:
     root: INFO
@@ -59,7 +91,38 @@ logging:
     org.springframework.web: DEBUG
     org.dddml.ffvtraceability: DEBUG
 
-# 开发工具配置
+# 开发环境授权服务器配置
 auth-server:
+  # 项目特定的CORS配置 - 包含所有开发和测试环境地址
+  cors:
+    allowed-origins: >-
+      http://localhost:8888,
+      http://localhost:8080,
+      http://localhost:3000,
+      http://127.0.0.1:3000,
+      http://localhost:1023,
+      https://al.u2511175.nyat.app:50518,
+      https://v0-beauty-consultant-ai-interface.vercel.app,
+      https://kzmjq05ormpml1bob042.lite.vusercontent.net,
+      https://shimmer-shell-auth.lovable.app
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+    allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,Origin,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-Dest
+    allow-credentials: true
+  
+  # 项目特定的Web客户端配置
+  web-clients:
+    allowed-client-ids: ffv-client,other-web-client
+    client-secrets: secret,other-secret
+  
+  # 开发工具配置
   dev-tools:
     enabled: true  # 启用开发工具API（密码编码等）
+
+# 开发环境微信配置 - 使用测试回调地址
+wechat:
+  mp:
+    redirect-uri: http://192.168.0.103:9000/wechat/callback
+
+# 开发环境短信配置 - 使用火山引擎
+sms:
+  provider: huoshan

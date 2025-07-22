@@ -1,0 +1,60 @@
+# Git相关
+.git
+.gitignore
+.gitmodules
+.github
+
+# IDE相关
+.idea
+.vscode
+*.iml
+*.ipr
+*.iws
+
+# 构建产物（保留jar文件）
+target/
+!target/ffvtraceability-auth-server-*.jar
+*.class
+
+# 日志文件
+logs/
+*.log
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.temp
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 环境配置文件
+.env*
+
+# 文档
+docs/
+README.md
+*.md
+
+# 测试相关
+src/test/
+
+# 参考资料
+reference-submodules/
+example-resource-server/
+
+# 脚本文件
+scripts/
+*.sh
+
+# Maven wrapper
+.mvn/wrapper/maven-wrapper.jar
+mvnw
+mvnw.cmd
+
+# 开发工具配置
+.editorconfig
+.cursorrules
+.agent.md
