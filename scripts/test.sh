@@ -187,7 +187,7 @@ fi
 echo "export SESSION_ID=$session_id" > session.env
 
 # 设置重定向 URI 并编码
-redirect_uri="http://127.0.0.1:3000/callback"
+redirect_uri="http://127.0.0.1:3000/auth/callback"
 encoded_redirect_uri=$(urlencode "$redirect_uri")
 echo "🌐 Redirect URI: $redirect_uri"
 

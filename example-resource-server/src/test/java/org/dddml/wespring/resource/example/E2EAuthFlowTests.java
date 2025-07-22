@@ -49,7 +49,7 @@ public class E2EAuthFlowTests {
     private final String AUTH_SERVER = "http://localhost:9000";
     private final String CLIENT_ID = "ffv-client"; // 需要在授权服务器中配置
     private final String CLIENT_SECRET = "secret";
-    private final String REDIRECT_URI = "http://127.0.0.1:3000/callback";
+    private final String REDIRECT_URI = "http://127.0.0.1:3000/auth/callback";
     
     // 测试用户配置
     private final String TEST_ADMIN_NAME = "admin";

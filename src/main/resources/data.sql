@@ -249,7 +249,7 @@ INSERT INTO oauth2_registered_client (
     'FFV Client',
     'client_secret_basic',
     'authorization_code,refresh_token',
-    'http://127.0.0.1:3000/callback,http://localhost:3000/callback,http://localhost:9000/callback',
+    'http://127.0.0.1:3000/auth/callback,http://localhost:3000/auth/callback,http://localhost:9000/callback',
     'http://127.0.0.1:3000/login,http://127.0.0.1:3000/logout,http://localhost:3000/login,http://localhost:3000/logout',
     'openid,profile',
     '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":true,"settings.client.require-authorization-consent":false}',
