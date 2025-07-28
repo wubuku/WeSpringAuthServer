@@ -127,7 +127,8 @@ public class SecurityConfig {
                                 "/wechat/**",
                                 "/demo/**",
                                 "/.well-known/**",
-                                "/dev-tools/**"  // 开发工具端点（仅dev profile启用）
+                                "/dev-tools/**",  // 开发工具端点（仅dev profile启用）
+                                "/health"  // 健康检查端点
                         ).permitAll()
                         .requestMatchers("/user-management", "/auth-srv/user-management")
                         .hasAuthority("Users_Read")
