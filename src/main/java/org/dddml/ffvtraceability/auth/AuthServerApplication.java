@@ -12,8 +12,10 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
  @EnableGlobalAuthentication
  其中 httpSecurity 在 HttpSecurityConfiguration 作为一个bean被初始化并注入到容器中
  其上的 @Scope("prototype") 注解使得每次请求都会创建一个新的实例
+ 
+ Spring Security Debug 通过 application.yml 中的 spring.security.debug 配置控制
  */
-@EnableWebSecurity(debug = true)
+@EnableWebSecurity
 @SpringBootApplication
 @EnableAsync
 public class AuthServerApplication {

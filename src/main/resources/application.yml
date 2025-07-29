@@ -92,6 +92,8 @@ spring:
     oauth2:
       authorization-server:
         issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
+    # Spring Security 调试配置 - 开发时可以启用
+    debug: ${SPRING_SECURITY_DEBUG:false}
 
 # =============================================================================
 # OAuth2 安全增强配置
@@ -184,6 +186,10 @@ logging:
     org.springframework.security.web.authentication.logout: ${LOG_LEVEL_LOGOUT:INFO}
     org.springframework.security.core.session: ${LOG_LEVEL_SESSION:INFO}
     org.springframework.web: ${LOG_LEVEL_WEB:INFO}
+    # 禁止健康检查和负载均衡器的噪音日志
+    org.springframework.web.servlet.DispatcherServlet: ${LOG_LEVEL_DISPATCHER:WARN}
+    org.springframework.session.web.http.SessionRepositoryFilter: ${LOG_LEVEL_SESSION_FILTER:WARN}
+    org.springframework.web.filter: ${LOG_LEVEL_WEB_FILTER:WARN}
     # 应用日志级别，可通过环境变量覆盖
     org.dddml.ffvtraceability: ${LOG_LEVEL_APP:INFO}
   # 生产环境日志文件配置

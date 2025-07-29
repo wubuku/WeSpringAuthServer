@@ -341,6 +341,12 @@ EOF
     read_input "密钥库路径" "/app/keys/jwt-signing-keys.jks" false false "容器内路径"
     JWT_KEYSTORE_PATH="$REPLY"
     
+    # 确保路径有正确的 Spring 资源前缀
+    if [[ ! "$JWT_KEYSTORE_PATH" =~ ^(file:|classpath:|http:|https:) ]]; then
+        JWT_KEYSTORE_PATH="file:$JWT_KEYSTORE_PATH"
+        print_info "自动添加 file: 前缀到密钥库路径: $JWT_KEYSTORE_PATH"
+    fi
+    
     # 生成密钥库
     generate_keystore "$JWT_KEYSTORE_PASSWORD" "$JWT_KEY_PASSWORD" "$JWT_KEY_ALIAS"
     

@@ -31,18 +31,8 @@ CREATE TABLE IF NOT EXISTS users (
     PRIMARY KEY (username)
 );
 
--- Check and add referrer_id column if it doesn't exist
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'users' AND column_name = 'referrer_id'
-    ) THEN
-        ALTER TABLE users ADD COLUMN referrer_id VARCHAR(255) DEFAULT NULL;
-    END IF;
-END $$;
-
 -- Referrer ID field added to support promotion scenarios
+-- (Column already defined in CREATE TABLE statement above)
 
 
 

@@ -39,7 +39,9 @@ public class WebTokenController {
     
     @Autowired
     private CookieSecurityConfig cookieSecurityConfig;
-    
+
+    // NOTE 我们这里并没有使用数据库中的配置，因为这个端点是“额外”附加的，先这样吧
+
     @Value("${auth-server.web-clients.allowed-client-ids}")
     private String[] allowedClientIds;
     @Value("${auth-server.web-clients.client-secrets}")
