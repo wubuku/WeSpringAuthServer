@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS authorities (
     CONSTRAINT fk_authorities_users FOREIGN KEY(username) REFERENCES users(username)
 );
 
-CREATE UNIQUE INDEX ix_auth_username ON authorities (username, authority);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_auth_username ON authorities (username, authority);
 
 -- 先删除依赖表 (注释掉以确保可重复运行)
 -- DROP TABLE IF EXISTS group_members;
