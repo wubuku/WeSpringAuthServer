@@ -13,36 +13,55 @@
 -- 例如：生产环境特定的OAuth2客户端、特殊权限等
 
 -- 生产环境OAuth2客户端示例（如果需要不同的配置）
+-- 把下面的 SQL 作为模板。特别注意修改包含了 `xxx` 和 `XXX` 的部分。
 /*
-INSERT INTO oauth2_registered_client (
-    id,
-    client_id,
-    client_id_issued_at,
-    client_secret,
-    client_name,
-    client_authentication_methods,
-    authorization_grant_types,
-    redirect_uris,
-    post_logout_redirect_uris,
-    scopes,
-    client_settings,
-    token_settings
-) VALUES (
-    'prod-client-id',
-    'production-client',
-    CURRENT_TIMESTAMP,
-    '{bcrypt}$2a$10$PRODUCTION_SECRET_HASH_HERE',
-    'Production Client',
-    'client_secret_basic',
-    'authorization_code,refresh_token',
-    'https://yourdomain.com/callback',
-    'https://yourdomain.com/logout',
-    'openid,profile',
-    '{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":true,"settings.client.require-authorization-consent":true}',
-    '{"@class":"java.util.Collections$UnmodifiableMap",
-    "settings.token.reuse-refresh-tokens":false,
-    "settings.token.access-token-time-to-live":["java.time.Duration",3600.000000000],
-    "settings.token.refresh-token-time-to-live":["java.time.Duration",86400.000000000],
-    "settings.token.authorization-code-time-to-live":["java.time.Duration",300.000000000]}'
-) ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.oauth2_registered_client (
+    id,client_id,client_id_issued_at,client_secret,client_secret_expires_at,client_name,
+    client_authentication_methods,authorization_grant_types,
+    redirect_uris,post_logout_redirect_uris,scopes,client_settings,token_settings
+    ) VALUES (
+	 'xxx-client-static-id',
+	 'xxx-client',
+	 '2025-06-15 21:44:30.947',
+	 '{bcrypt}$2a$10$xxx',
+	 NULL,
+	 'XXX Client',
+	 'client_secret_basic','authorization_code,refresh_token',
+	 'https://admin.xxx.com/auth/callback',
+	 'https://admin.xxx.com/login,https://admin.xxx.com/logout',
+	 'openid,profile','{"@class":"java.util.Collections$UnmodifiableMap","settings.client.require-proof-key":true,"settings.client.require-authorization-consent":false}',
+	 '{"@class":"java.util.Collections$UnmodifiableMap",
+    "settings.token.reuse-refresh-tokens":true,
+    "settings.token.access-token-time-to-live":["java.time.Duration",7200.000000000],
+    "settings.token.refresh-token-time-to-live":["java.time.Duration",7776000.000000000],
+    "settings.token.authorization-code-time-to-live":["java.time.Duration",600.000000000]}'
+    ) ON CONFLICT (id) DO NOTHING;
+*/
+
+
+-- 创建项目特定的用户组
+INSERT INTO groups (group_name, enabled) VALUES
+    ('HQ_ADMIN_GROUP', true),
+    ('DISTRIBUTOR_ADMIN_GROUP', true),
+    ('STORE_ADMIN_GROUP', true),
+    ('CONSULTANT_GROUP', true),
+    ('DISTRIBUTOR_EMPLOYEE_GROUP', true)
+ON CONFLICT (group_name) DO NOTHING;
+
+
+-- 添加项目特定的权限定义
+INSERT INTO authority_definitions (authority_id, description, enabled) VALUES
+    ('ROLE_HQ_ADMIN', 'Headquarters Administrator', true),
+    ('ROLE_DISTRIBUTOR_ADMIN', 'Distributor Administrator', true),
+    ('ROLE_STORE_ADMIN', 'Store Administrator', true),
+    ('ROLE_CONSULTANT', 'Consultant Role', true),
+    ('ROLE_DISTRIBUTOR_EMPLOYEE', 'Distributor Employee', true)
+ON CONFLICT (authority_id) DO NOTHING;
+
+-- 总部管理员 - 拥有所有权限
+/*
+INSERT INTO authorities (username, authority) VALUES
+    ('hq_admin', 'ROLE_HQ_ADMIN'),
+    ('hq_admin', 'ROLE_ADMIN')
+ON CONFLICT (username, authority) DO NOTHING;
 */
