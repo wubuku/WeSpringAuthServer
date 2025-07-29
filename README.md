@@ -30,6 +30,135 @@
 - Maven 3.6+
 - PostgreSQL 12+
 
+## 生产环境部署
+
+### 🚀 一键生成生产配置
+
+本项目提供了智能的生产环境配置生成工具，可以引导您完成所有必要的配置：
+
+```bash
+# 运行配置生成工具
+./scripts/generate-production-config.sh
+```
+
+该工具将：
+- ✅ 引导您输入所有必需的配置项
+- ✅ 自动生成强密码和加密密钥
+- ✅ 创建JWT签名密钥库
+- ✅ 生成完整的 `.env.prod` 环境变量文件
+- ✅ 提供Docker部署命令示例
+
+### 📋 生产部署步骤
+
+1. **生成配置文件**
+   ```bash
+   ./scripts/generate-production-config.sh
+   ```
+
+2. **构建应用**
+   ```bash
+   ./mvnw clean package -DskipTests
+   ```
+
+3. **准备部署文件**
+   ```bash
+   # 将以下文件上传到生产服务器：
+   # - .env.prod (环境变量配置)
+   # - production-keys/ (JWT密钥目录)
+   # - target/ffvtraceability-auth-server-*.jar (应用JAR包)
+   ```
+
+4. **Docker部署**
+   ```bash
+   # 使用生成的配置文件部署
+   docker run -d \
+     --name auth-server \
+     --env-file .env.prod \
+     -v $(pwd)/production-keys:/app/keys:ro \
+     -p 9000:9000 \
+     your-registry/auth-server:latest
+   ```
+
+### 🔧 配置说明
+
+#### 必需配置项
+- **数据库配置**: PostgreSQL连接信息
+- **OAuth2配置**: 授权服务器URL、Cookie域名
+- **JWT密钥**: 自动生成的签名密钥
+- **邮件服务**: 用于密码重置功能
+- **CORS配置**: 前端应用的访问权限
+
+#### 可选配置项
+- **微信登录**: 微信小程序集成
+- **短信服务**: 阿里云或火山引擎短信
+- **日志配置**: 自定义日志级别和路径
+
+#### 安全注意事项
+- 🔒 所有敏感信息通过环境变量配置
+- 🔒 JWT密钥使用独立的密钥库文件
+- 🔒 生产环境强制HTTPS Cookie
+- 🔒 严格的CORS域名限制
+- 🔒 不暴露任何错误详情
+
+### 🐳 Docker Compose 部署
+
+创建 `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+services:
+  auth-server:
+    image: your-registry/auth-server:latest
+    container_name: auth-server
+    env_file:
+      - .env.prod
+    volumes:
+      - ./production-keys:/app/keys:ro
+      - ./logs:/var/log/auth-server
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    
+  postgres:
+    image: postgres:15
+    container_name: auth-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+```
+
+### 🔍 部署验证
+
+部署完成后，验证服务状态：
+
+```bash
+# 检查服务健康状态
+curl http://localhost:9000/actuator/health
+
+# 检查OAuth2配置
+curl http://localhost:9000/.well-known/oauth-authorization-server
+
+# 检查OIDC配置
+curl http://localhost:9000/.well-known/openid_configuration
+```
+
+### ⚠️ 重要提醒
+
+1. **检查占位符**: 部署前确保所有 `xxx` 占位符都已替换为实际值
+2. **数据库初始化**: 首次部署时确保数据库已创建
+3. **HTTPS配置**: 生产环境建议使用负载均衡器处理HTTPS
+4. **备份密钥**: 妥善保管 `production-keys/` 目录中的密钥文件
+5. **监控日志**: 关注应用启动日志，确保所有配置正确加载
+
 ### 启动服务器
 
 ```bash
