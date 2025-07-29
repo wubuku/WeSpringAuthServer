@@ -11,16 +11,16 @@ ON CONFLICT (group_name) DO NOTHING;
 -- 生产环境应该通过安全的方式创建管理员用户和客户端配置
 
 -- 添加基础权限定义
-INSERT INTO authority_definitions (authority, description, category, enabled) VALUES
-    ('ROLE_ADMIN', 'System Administrator Role', 'SYSTEM', true),
-    ('ROLE_USER', 'Basic User Role', 'SYSTEM', true),
-    ('Users_Read', 'Read user information', 'USER_MANAGEMENT', true),
-    ('Users_Create', 'Create new users', 'USER_MANAGEMENT', true),
-    ('Users_Update', 'Update user information', 'USER_MANAGEMENT', true),
-    ('Users_Disable', 'Disable/Enable users', 'USER_MANAGEMENT', true),
-    ('Roles_Read', 'Read role information', 'ROLE_MANAGEMENT', true),
-    ('Roles_Create', 'Create new roles', 'ROLE_MANAGEMENT', true),
-    ('Roles_Update', 'Update role information', 'ROLE_MANAGEMENT', true),
-    ('Roles_Disable', 'Disable/Enable roles', 'ROLE_MANAGEMENT', true)
-ON CONFLICT (authority) DO NOTHING;
+INSERT INTO authority_definitions (authority_id, description, enabled) VALUES
+    ('ROLE_ADMIN', 'System Administrator Role', true),
+    ('ROLE_USER', 'Basic User Role', true),
+    ('Users_Read', 'Read user information', true),
+    ('Users_Create', 'Create new users', true),
+    ('Users_Update', 'Update user information', true),
+    ('Users_Disable', 'Disable/Enable users', true),
+    ('Roles_Read', 'Read role information', true),
+    ('Roles_Create', 'Create new roles', true),
+    ('Roles_Update', 'Update role information', true),
+    ('Roles_Disable', 'Disable/Enable roles', true)
+ON CONFLICT (authority_id) DO NOTHING;
 
