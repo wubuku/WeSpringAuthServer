@@ -60,6 +60,10 @@ ON CONFLICT (authority_id) DO NOTHING;
 
 -- 总部管理员 - 拥有所有权限
 /*
+INSERT INTO users (username, password, enabled, password_change_required, first_login, password_last_changed) VALUES
+    ('hq_admin', '{bcrypt}$2a$10$xxx', true, false, false, CURRENT_TIMESTAMP)
+ON CONFLICT (username) DO NOTHING;
+
 INSERT INTO authorities (username, authority) VALUES
     ('hq_admin', 'ROLE_HQ_ADMIN'),
     ('hq_admin', 'ROLE_ADMIN')

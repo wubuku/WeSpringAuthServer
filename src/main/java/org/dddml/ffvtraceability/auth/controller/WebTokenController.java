@@ -1,5 +1,7 @@
 package org.dddml.ffvtraceability.auth.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.config.CookieSecurityConfig;
@@ -17,12 +19,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 /**
  * Web客户端Token处理Controller
- * 
+ * <p>
  * 🔒 安全升级 (2024-01-XX)：
  * - 添加HttpOnly Cookie支持存储refresh_token
  * - 从响应中移除refresh_token，提高安全性
@@ -32,11 +31,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class WebTokenController {
 
     private static final Logger logger = LoggerFactory.getLogger(WebTokenController.class);
-    
+
     private final OAuth2AuthorizationService authorizationService;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    
+
     @Autowired
     private CookieSecurityConfig cookieSecurityConfig;
 
@@ -44,8 +43,12 @@ public class WebTokenController {
 
     @Value("${auth-server.web-clients.allowed-client-ids}")
     private String[] allowedClientIds;
+
     @Value("${auth-server.web-clients.client-secrets}")
     private String[] clientSecrets;
+
+    @Value("${auth-server.web-clients.token-endpoint-url}")
+    private String tokenEndpointUrl;
 
     public WebTokenController(OAuth2AuthorizationService authorizationService) {
         this.authorizationService = authorizationService;
@@ -55,7 +58,7 @@ public class WebTokenController {
 
     /**
      * OAuth2 Token端点 - 授权码交换access_token
-     * 
+     * <p>
      * 🔒 安全升级：成功获取token后设置HttpOnly Cookie存储refresh_token
      */
     @PostMapping("/token")
@@ -103,7 +106,7 @@ public class WebTokenController {
 
             // 3. 调用本地 token endpoint
             ResponseEntity<String> originalResponse = restTemplate.postForEntity(
-                    "http://localhost:" + request.getServerPort() + "/oauth2/token",
+                    tokenEndpointUrl,
                     requestEntity,
                     String.class
             );
@@ -133,24 +136,24 @@ public class WebTokenController {
      * - 提取refresh_token并设置HttpOnly Cookie
      * - 从响应中移除refresh_token
      */
-    private ResponseEntity<String> handleCookieModeResponse(ResponseEntity<String> originalResponse, 
-                                                           HttpServletResponse response) {
+    private ResponseEntity<String> handleCookieModeResponse(ResponseEntity<String> originalResponse,
+                                                            HttpServletResponse response) {
         try {
             JsonNode jsonResponse = objectMapper.readTree(originalResponse.getBody());
-            
+
             if (jsonResponse.has("refresh_token")) {
                 String refreshToken = jsonResponse.get("refresh_token").asText();
-                
+
                 // 🔒 设置HttpOnly Cookie存储refresh_token
                 cookieSecurityConfig.setRefreshTokenCookie(response, refreshToken);
-                logger.info("✅ 设置HttpOnly Cookie存储refresh_token: {}...", 
-                           refreshToken.substring(0, Math.min(20, refreshToken.length())));
-                
+                logger.info("✅ 设置HttpOnly Cookie存储refresh_token: {}...",
+                        refreshToken.substring(0, Math.min(20, refreshToken.length())));
+
                 // 🔒 从响应中移除refresh_token
                 ((com.fasterxml.jackson.databind.node.ObjectNode) jsonResponse).remove("refresh_token");
-                
+
                 String secureResponseBody = objectMapper.writeValueAsString(jsonResponse);
-                
+
                 logger.debug("✅ Token请求成功 (Cookie安全模式)");
                 return ResponseEntity.status(originalResponse.getStatusCode())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -161,7 +164,7 @@ public class WebTokenController {
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(originalResponse.getBody());
             }
-            
+
         } catch (Exception e) {
             logger.error("❌ 处理Cookie模式响应失败: {}", e.getMessage(), e);
             // 发生错误时返回原始响应

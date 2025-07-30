@@ -159,6 +159,8 @@ auth-server:
     allowed-client-ids: ${WEB_CLIENT_IDS:web-client}
     # 对应的客户端密钥列表
     client-secrets: ${WEB_CLIENT_SECRETS:web-secret}
+    # token 端点 URL
+    token-endpoint-url: ${WEB_CLIENT_TOKEN_ENDPOINT_URL:http://localhost:9000/oauth2/token}
 
 # =============================================================================
 # JWT密钥配置
