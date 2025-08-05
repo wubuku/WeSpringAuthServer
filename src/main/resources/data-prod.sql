@@ -58,6 +58,11 @@ INSERT INTO authority_definitions (authority_id, description, enabled) VALUES
     ('ROLE_DISTRIBUTOR_EMPLOYEE', 'Distributor Employee', true)
 ON CONFLICT (authority_id) DO NOTHING;
 
+-- 移除 authorities 表的 fk_authorities_users 约束。
+-- 因为我们需要预先给使用手机号登录的用户添加权限。
+-- 按照目前的应用逻辑，使用手机号登录的用户，只有在第一次登录时才会创建用户。
+ALTER TABLE public.authorities DROP CONSTRAINT fk_authorities_users;
+
 -- 总部管理员 - 拥有所有权限
 /*
 INSERT INTO users (username, password, enabled, password_change_required, first_login, password_last_changed) VALUES
@@ -68,4 +73,18 @@ INSERT INTO authorities (username, authority) VALUES
     ('hq_admin', 'ROLE_HQ_ADMIN'),
     ('hq_admin', 'ROLE_ADMIN')
 ON CONFLICT (username, authority) DO NOTHING;
+
+INSERT INTO authorities (username, authority) VALUES
+    ('MV_15201936881', 'ROLE_STORE_ADMIN')
+ON CONFLICT (username, authority) DO NOTHING;
+
+INSERT INTO authorities (username, authority) VALUES
+    ('MV_15837656031', 'ROLE_STORE_ADMIN')
+ON CONFLICT (username, authority) DO NOTHING;
+
+INSERT INTO authorities (username, authority) VALUES
+    ('MV_19122156038', 'ROLE_HQ_ADMIN'),
+    ('MV_19122156038', 'ROLE_DISTRIBUTOR_ADMIN')
+ON CONFLICT (username, authority) DO NOTHING;
+
 */
