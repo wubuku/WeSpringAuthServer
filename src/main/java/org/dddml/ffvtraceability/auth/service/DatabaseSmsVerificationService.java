@@ -79,6 +79,14 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
     @Value("${sms.code-expiration-minutes:5}")
     private int defaultExpirationMinutes;
 
+    // Test login override for app store review
+    @Value("${sms.test-login.enabled:false}")
+    private boolean testLoginEnabled;
+    @Value("${sms.test-login.phone-number:}")
+    private String testLoginPhoneNumber;
+    @Value("${sms.test-login.code:}")
+    private String testLoginCode;
+
     @Autowired
     public DatabaseSmsVerificationService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -199,6 +207,13 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
     @Transactional
     public boolean verifyCode(String phoneNumber, String code) {
         try {
+            // Allow a configured phone number to use a fixed code for app store review
+            if (testLoginEnabled && phoneNumber != null && code != null
+                    && phoneNumber.equals(testLoginPhoneNumber)
+                    && code.equals(testLoginCode)) {
+                logger.warn("Using configured test SMS code for special login (app review scenario).");
+                return true;
+            }
             return Boolean.TRUE.equals(jdbcTemplate.execute((Connection conn) ->
                     verifyAndMarkCodeAsUsed(conn, phoneNumber, code)));
         } catch (Exception e) {

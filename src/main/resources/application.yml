@@ -238,6 +238,11 @@ sms:
   code-length: ${SMS_CODE_LENGTH:6}
   # 验证码有效期（分钟）
   code-expiration-minutes: ${SMS_CODE_EXPIRATION:5}
+  # 应用商店审核测试用：为特定手机号允许固定验证码登录
+  test-login:
+    enabled: ${SMS_TEST_LOGIN_ENABLED:false}
+    phone-number: ${SMS_TEST_LOGIN_PHONE_NUMBER:}
+    code: ${SMS_TEST_LOGIN_CODE:}
   
   # 阿里云短信配置
   aliyun:
