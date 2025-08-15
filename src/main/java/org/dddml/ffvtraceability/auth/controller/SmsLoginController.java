@@ -137,12 +137,15 @@ public class SmsLoginController {
      * 无状态API，返回OAuth2 access_token和refresh_token
      * <p>
      * 🔒 安全升级：成功登录时设置HttpOnly Cookie存储refresh_token
+     * 
+     * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @GetMapping("/auth")
     public void smsAuth(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
                         @RequestParam("mobileNumber") String mobileNumber,
                         @RequestParam("verificationCode") String verificationCode,
                         @RequestParam(value = "referrerId", required = false) String referrerId,
+                        @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
                         HttpServletResponse response) throws IOException {
         try {
             CustomUserDetails userDetails = smsVerificationService.processSmsLogin(mobileNumber, verificationCode, referrerId);
@@ -156,8 +159,15 @@ public class SmsLoginController {
             cookieSecurityConfig.setRefreshTokenCookie(response, tokenPair.getRefreshToken().getTokenValue());
             logger.debug("Set HttpOnly Cookie for refresh_token in SMS login");
 
-            // 🔒 安全关键：使用Cookie安全模式，不在响应中暴露refresh_token
-            oAuth2AuthenticationHelper.writeTokenResponse(response, tokenPair, true);
+            // 兼容模式控制：legacyMode=true时在响应体中返回refresh_token（微信小程序），false时仅使用Cookie（Web）
+            boolean cookieMode = !legacyMode; // legacyMode=true -> cookieMode=false (返回refresh_token)
+            oAuth2AuthenticationHelper.writeTokenResponse(response, tokenPair, cookieMode);
+            
+            if (legacyMode) {
+                logger.debug("SMS login using legacy mode - refresh_token included in response body for miniprogram compatibility");
+            } else {
+                logger.debug("SMS login using cookie mode - refresh_token only in HttpOnly Cookie");
+            }
 
         } catch (AuthenticationException e) {
             oAuth2AuthenticationHelper.handleAuthenticationError(response, e, MSG_SMS_AUTH_FAILED);
@@ -172,15 +182,18 @@ public class SmsLoginController {
      * 无状态API，返回OAuth2 access_token和refresh_token
      * <p>
      * 🔒 安全升级：成功登录时设置HttpOnly Cookie存储refresh_token
+     * 
+     * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @GetMapping("/login")
     public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
                          @RequestParam("mobileNumber") String mobileNumber,
                          @RequestParam("verificationCode") String verificationCode,
                          @RequestParam(value = "referrerId", required = false) String referrerId,
+                         @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
                          HttpServletResponse response) throws IOException {
-        // 使用相同的逻辑，包括安全升级
-        smsAuth(clientId, mobileNumber, verificationCode, referrerId, response);
+        // 使用相同的逻辑，包括安全升级和兼容模式
+        smsAuth(clientId, mobileNumber, verificationCode, referrerId, legacyMode, response);
     }
 
     /**
@@ -190,6 +203,8 @@ public class SmsLoginController {
      * - 从HttpOnly Cookie读取refresh_token，不再从请求参数获取
      * - 从后端配置获取client_secret，不再从前端传输
      * - 成功刷新后更新Cookie中的refresh_token
+     * 
+     * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @PostMapping("/refresh-token")
     @ResponseBody
@@ -197,6 +212,7 @@ public class SmsLoginController {
             @RequestParam(value = "grant_type", required = false) String grantType,
             @RequestParam(value = "refresh_token", required = false) String refreshTokenFromParam,
             @RequestParam(value = "client_id", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+            @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
             HttpServletRequest request,
             HttpServletResponse response) {
 
@@ -235,9 +251,10 @@ public class SmsLoginController {
 
             logger.debug("✅ Client secret retrieved for client: {}", clientId);
 
-            // 🔒 安全升级：使用Cookie安全模式，不在响应中暴露refresh_token
+            // 兼容模式控制：legacyMode=true时在响应体中返回refresh_token（微信小程序），false时仅使用Cookie（Web）
+            boolean cookieMode = !legacyMode; // legacyMode=true -> cookieMode=false (返回refresh_token)
             ResponseEntity<Map<String, Object>> result = oAuth2AuthenticationHelper.processRefreshToken(
-                    grantType, refreshTokenValue, clientId, clientSecret, request, true);
+                    grantType, refreshTokenValue, clientId, clientSecret, request, cookieMode);
 
             // 🔒 安全升级：如果刷新成功，从header读取新的refresh_token并更新Cookie
             if (result.getStatusCode().is2xxSuccessful()) {

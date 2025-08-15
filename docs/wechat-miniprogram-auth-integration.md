@@ -1,17 +1,35 @@
-### 微信小程序接入 WeSpring Auth Server（微信登录 + 短信登录 + HttpOnly Cookie 刷新）实战指南
+### 微信小程序接入 WeSpring Auth Server（微信登录 + 短信登录 + 安全Token管理）实战指南
 
-本文档面向微信小程序前端开发，指导如何对接本认证服务器的"微信登录"、"短信验证码登录"与"基于 HttpOnly Cookie 的 refresh_token 自动刷新"能力，涵盖端到端测试方法、常见问题排查以及生产注意事项。
+本文档面向微信小程序前端开发，指导如何对接本认证服务器的"微信登录"、"短信验证码登录"与"安全Token管理"能力，涵盖端到端测试方法、常见问题排查以及生产注意事项。
+
+## 🚩 关键信息（重要变更）
+
+- 默认安全策略：服务端使用 HttpOnly Cookie 管理 `refresh_token`，响应体仅返回 `access_token`（适用于 Web）。
+- 为兼容微信小程序，现支持可选参数 `legacyMode=true`，当设置后，服务端会在响应体中一并返回 `refresh_token`，以便小程序本地安全存储；默认仍为 `false`。
+- 支持 `legacyMode` 的端点（仅列出与登录/刷新相关）：
+  - `GET /wechat/login`、`POST /wechat/refresh-token`
+  - `GET /sms/auth`、`GET /sms/login`、`POST /sms/refresh-token`
+- 微信小程序接入要点（强烈推荐遵循）：
+  - 登录与刷新时都携带 `legacyMode=true`
+  - 登录成功后从响应体获取并安全存储 `access_token` 与 `refresh_token`
+  - 刷新时显式传入 `refresh_token`
+
+## ⚠️ 重要说明：微信小程序Cookie限制
+
+**微信小程序不支持传统浏览器的Cookie机制**，包括HttpOnly Cookie。因此在小程序场景下，请使用 `legacyMode=true` 获取并在本地安全存储 `refresh_token`（例如 `wx.setStorageSync()`）。
 
 ---
 
 #### 能力概览
 - **微信登录**（/wechat/login）- 使用微信授权码直接登录
 - **短信验证码登录**（/sms/auth 与 /sms/login）- 传统手机号验证码登录
-- **统一Token机制**：access_token 短时有效；refresh_token 安全地写入 HttpOnly Cookie
+- **统一Token机制**：`access_token` 短时有效；`refresh_token` 按场景存储
 - **统一刷新接口**：
   - `/wechat/refresh-token` - 微信登录专用刷新端点
   - `/sms/refresh-token` - SMS登录专用刷新端点
-- **Cookie安全策略**：从 Cookie 读取 refresh_token 并自动更新 Cookie
+- **按场景切换**：
+  - Web：默认使用 HttpOnly Cookie 管理 `refresh_token`
+  - 小程序：请求时加 `legacyMode=true`，在响应体获取 `refresh_token` 并本地安全存储
 - 可选：应用商店审核"测试手机号 + 固定验证码"直登（仅测试环境）
 
 ---
@@ -26,8 +44,9 @@
 1. 小程序调用 `wx.login()` 获取临时授权码（code）
 2. 将授权码发送到认证服务器的 `/wechat/login` 端点
 3. 服务器使用授权码向微信服务器验证用户身份
-4. 验证成功后返回 `access_token`，`refresh_token` 自动存储在 HttpOnly Cookie 中
-5. 后续API调用使用 `access_token`，token过期时自动使用Cookie中的 `refresh_token` 刷新
+4. 验证成功后返回 `access_token` 和（当 `legacyMode=true`）`refresh_token`
+5. 小程序使用 `wx.setStorageSync()` 安全存储两个 token
+6. 后续 API 调用使用 `access_token`，token 过期时使用 `refresh_token` 刷新
 
 ### 1.2 微信登录端点
 
@@ -36,7 +55,7 @@
 wx.login({
   success: function(res) {
     if (res.code) {
-      // 发送 res.code 到后台换取 access_token
+      // 发送 res.code 到后台换取 tokens
       wx.request({
         url: 'https://your-auth-server.com/wechat/login',
         method: 'GET',
@@ -44,16 +63,17 @@ wx.login({
           loginCode: res.code,
           clientId: 'ffv-client',  // 可选，默认为 ffv-client
           mobileCode: '',          // 可选，如需绑定手机号
-          referrerId: ''           // 可选，推荐人ID
+          referrerId: '',          // 可选，推荐人ID
+          legacyMode: true         // 关键：小程序需置为 true 才会在响应体返回 refresh_token
         },
         success: function(loginRes) {
           if (loginRes.statusCode === 200) {
-            // 登录成功，access_token 在响应中
-            // refresh_token 已自动存储在 HttpOnly Cookie 中
-            const accessToken = loginRes.data.access_token;
+            // 登录成功，获取tokens
+            const { access_token, refresh_token } = loginRes.data;
             
-            // 存储 access_token 用于后续API调用
-            wx.setStorageSync('access_token', accessToken);
+            // 安全存储tokens到小程序本地存储
+            wx.setStorageSync('access_token', access_token);
+            wx.setStorageSync('refresh_token', refresh_token);
             
             console.log('微信登录成功');
           }
@@ -72,20 +92,30 @@ wx.login({
 // 刷新 access_token
 function refreshWeChatToken() {
   return new Promise((resolve, reject) => {
+    const refreshToken = wx.getStorageSync('refresh_token');
+    if (!refreshToken) {
+      reject(new Error('没有可用的refresh_token'));
+      return;
+    }
+    
     wx.request({
       url: 'https://your-auth-server.com/wechat/refresh-token',
       method: 'POST',
       data: {
         grant_type: 'refresh_token',
-        client_id: 'ffv-client'
-        // 注意：不需要传递 refresh_token，它会从 HttpOnly Cookie 中自动读取
+        client_id: 'ffv-client',
+        refresh_token: refreshToken, // 从本地存储获取
+        legacyMode: true             // 关键：小程序需置为 true 才会在响应体返回 refresh_token（如有轮换）
       },
       success: function(res) {
         if (res.statusCode === 200) {
-          // 刷新成功，新的 refresh_token 已自动更新到 Cookie
-          const newAccessToken = res.data.access_token;
-          wx.setStorageSync('access_token', newAccessToken);
-          resolve(newAccessToken);
+          // 刷新成功，更新本地存储的tokens
+          const { access_token, refresh_token } = res.data;
+          wx.setStorageSync('access_token', access_token);
+          if (refresh_token) {
+            wx.setStorageSync('refresh_token', refresh_token);
+          }
+          resolve(access_token);
         } else {
           reject(new Error('Token刷新失败'));
         }
@@ -133,7 +163,7 @@ function apiRequest(options) {
 
 ---
 
-## 2. 短信登录集成指南（传统方式）
+## 2. 短信登录集成指南
 
 短信登录适用于需要验证用户手机号的场景，或作为微信登录的补充认证方式。
 
@@ -194,10 +224,12 @@ SMS_TEST_LOGIN_CODE=246810
 - 发送验证码
   - POST `/sms/send-code`（表单或 JSON）
 - 登录并颁发令牌
-  - GET `/sms/auth`（推荐，响应 JSON：access_token；refresh_token 写入 HttpOnly Cookie）
+  - GET `/sms/auth`（Web 默认：响应 JSON 仅含 `access_token`，`refresh_token` 写入 HttpOnly Cookie）
   - GET `/sms/login`（等价别名）
+  - 小程序：上述登录请求需加 `legacyMode=true`，服务端会在响应体包含 `refresh_token`
 - 刷新令牌
-  - POST `/sms/refresh-token`（只需带 Cookie；服务端从 Cookie 读取 refresh_token 并在成功时通过 `Set-Cookie` 轮换）
+  - Web 默认：POST `/sms/refresh-token`（仅需 Cookie；服务端从 Cookie 读取 `refresh_token` 并通过 `Set-Cookie` 轮换）
+  - 小程序：POST `/sms/refresh-token` 时带上 `refresh_token` 与 `legacyMode=true`
 
 ---
 
@@ -232,7 +264,7 @@ wx.request({
 });
 ```
 
-### 3.2 登录（颁发 access_token，Cookie 内含 refresh_token）
+### 3.2 登录（小程序：响应体返回 refresh_token）
 ```javascript
 const BASE_URL = 'https://iam.ruichuangqi.com';
 const phone = '13800138000';
@@ -244,17 +276,19 @@ wx.request({
   data: {
     clientId: 'ffv-client',
     mobileNumber: phone,
-    verificationCode: code
+    verificationCode: code,
+    legacyMode: true
   },
   success(res) {
-    const { access_token } = res.data || {};
+    const { access_token, refresh_token } = res.data || {};
     if (access_token) wx.setStorageSync('ACCESS_TOKEN', access_token);
+    if (refresh_token) wx.setStorageSync('refresh_token', refresh_token);
   },
   fail(err) { console.error('auth fail', err); }
 });
 ```
 
-### 3.3 刷新令牌（依赖 Cookie，前端无需读取 refresh_token）
+### 3.3 刷新令牌（小程序需显式传参）
 ```javascript
 const BASE_URL = 'https://iam.ruichuangqi.com';
 
@@ -262,7 +296,9 @@ wx.request({
   url: `${BASE_URL}/sms/refresh-token`,
   method: 'POST',
   header: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  data: 'grant_type=refresh_token&client_id=ffv-client',
+  // Web 默认：只需 Cookie；
+  // 小程序：需要传入 refresh_token 与 legacyMode=true
+  data: `grant_type=refresh_token&client_id=ffv-client&refresh_token=${encodeURIComponent(wx.getStorageSync('refresh_token'))}&legacyMode=true`,
   success(res) {
     const { access_token } = res.data || {};
     if (access_token) wx.setStorageSync('ACCESS_TOKEN', access_token);
@@ -282,19 +318,25 @@ wx.request({
 | **用户体验**          | 一键登录，无需输入         | 需要输入手机号和验证码               |
 | **安全性**            | 依赖微信平台认证           | 手机号短信验证                       |
 | **refresh_token支持** | ✅ 完全支持                 | ✅ 完全支持                           |
-| **HttpOnly Cookie**   | ✅ 自动存储                 | ✅ 自动存储                           |
+| **存储方式**          | 小程序本地存储（`legacyMode=true` 时响应体返回） | Web: HttpOnly Cookie<br/>小程序: 本地存储 |
 | **刷新端点**          | `/wechat/refresh-token`    | `/sms/refresh-token`                 |
 | **适用场景**          | 微信生态内应用             | 通用手机号验证                       |
 | **离线使用**          | 需要微信授权               | 独立于第三方平台                     |
 
 ### 3.2 Token机制统一性
 
-**两种登录方式的Token机制完全一致：**
+**两种登录方式的Token机制基本一致：**
 
 1. **Token生成**：都使用相同的OAuth2 Token生成器
-2. **存储方式**：refresh_token都存储在HttpOnly Cookie中
-3. **安全策略**：都不在响应中暴露refresh_token
-4. **刷新机制**：都支持自动从Cookie读取refresh_token进行刷新
+2. **存储方式**：
+   - **Web应用**：`refresh_token` 存储在 HttpOnly Cookie 中
+   - **微信小程序**：将 `legacyMode=true`，在响应体获取 `refresh_token` 后本地安全存储（`wx.setStorageSync()`）
+3. **安全策略**：
+   - **Web应用**：默认不在响应中暴露 `refresh_token`（Cookie 模式）
+   - **微信小程序**：通过 `legacyMode=true` 在响应中返回 `refresh_token`（仅限小程序场景）
+4. **刷新机制**：
+   - **Web应用**：从 Cookie 自动读取 `refresh_token`
+   - **微信小程序**：从本地存储读取 `refresh_token` 并在请求中传递，同时设置 `legacyMode=true`
 5. **过期时间**：access_token (1小时)，refresh_token (24小时)
 
 ### 3.3 最佳实践建议
@@ -323,18 +365,24 @@ async function smartLogin() {
   }
 }
 
-// 统一的Token刷新处理
+// 统一的Token刷新处理（微信小程序版本）
 async function refreshToken(loginMethod) {
   const endpoint = loginMethod === 'wechat' 
     ? '/wechat/refresh-token' 
     : '/sms/refresh-token';
+  
+  const refreshToken = wx.getStorageSync('refresh_token');
+  if (!refreshToken) {
+    throw new Error('没有可用的refresh_token');
+  }
     
   return wx.request({
     url: `https://your-auth-server.com${endpoint}`,
     method: 'POST',
     data: {
       grant_type: 'refresh_token',
-      client_id: 'ffv-client'
+      client_id: 'ffv-client',
+      refresh_token: refreshToken  // 微信小程序需要显式传递
     }
   });
 }
@@ -478,7 +526,8 @@ proxy_set_header Host $host;
 
 ## 8. 安全与合规注意事项
 
-- refresh_token 仅在 HttpOnly Cookie；不要在响应体或日志中暴露
+- **Web**：`refresh_token` 存储于 HttpOnly Cookie；不要在响应体或日志中暴露。
+- **微信小程序**：仅当请求携带 `legacyMode=true` 时，响应体才会返回 `refresh_token`；务必本地安全存储（例如 `wx.setStorageSync()`），并严格避免在日志中暴露。
 - 生产环境强制使用 HTTPS 与 `Secure` Cookie
 - 审核“测试手机号 + 固定验证码”仅用于短期测试，务必在生产关闭
 - 管理端接口与页面必须有 `ROLE_ADMIN` 保护（参考项目安全开发规范）

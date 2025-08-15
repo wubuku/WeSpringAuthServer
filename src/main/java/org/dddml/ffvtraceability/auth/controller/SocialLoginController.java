@@ -68,12 +68,15 @@ public class SocialLoginController {
      * <p>
      * 这些修改不影响原有的WeChat登录流程，只是增强了token管理功能。
      * 原有的认证逻辑（weChatService.processWeChatLogin）保持不变。
+     * 
+     * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @GetMapping("/wechat/login")
     public void wechatLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
                             @RequestParam("loginCode") String loginCode,
                             @RequestParam(value = "mobileCode", required = false) String mobileCode,
                             @RequestParam(value = "referrerId", required = false) String referrerId,
+                            @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
                             HttpServletResponse response) throws IOException {
         try {
             validateLoginParameters(loginCode, mobileCode);
@@ -89,8 +92,15 @@ public class SocialLoginController {
             cookieSecurityConfig.setRefreshTokenCookie(response, tokenPair.getRefreshToken().getTokenValue());
             logger.debug("Set HttpOnly Cookie for refresh_token in WeChat login");
 
-            // 🔒 安全关键：使用Cookie安全模式，不在响应中暴露refresh_token
-            oAuth2AuthenticationHelper.writeTokenResponse(response, tokenPair, true);
+            // 兼容模式控制：legacyMode=true时在响应体中返回refresh_token（微信小程序），false时仅使用Cookie（Web）
+            boolean cookieMode = !legacyMode; // legacyMode=true -> cookieMode=false (返回refresh_token)
+            oAuth2AuthenticationHelper.writeTokenResponse(response, tokenPair, cookieMode);
+            
+            if (legacyMode) {
+                logger.debug("WeChat login using legacy mode - refresh_token included in response body for miniprogram compatibility");
+            } else {
+                logger.debug("WeChat login using cookie mode - refresh_token only in HttpOnly Cookie");
+            }
 
         } catch (AuthenticationException e) {
             oAuth2AuthenticationHelper.handleAuthenticationError(response, e, MSG_WECHAT_AUTH_FAILED);
@@ -107,6 +117,8 @@ public class SocialLoginController {
      * - 从HttpOnly Cookie读取refresh_token，不再从请求参数获取
      * - 从后端配置获取client_secret，不再从前端传输
      * - 成功刷新后更新Cookie中的refresh_token
+     * 
+     * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @PostMapping("/wechat/refresh-token")
     @ResponseBody
@@ -114,6 +126,7 @@ public class SocialLoginController {
             @RequestParam(value = "grant_type", required = false) String grantType,
             @RequestParam(value = "refresh_token", required = false) String refreshTokenFromParam,
             @RequestParam(value = "client_id", defaultValue = DEFAULT_CLIENT_ID) String clientId, // 注意这个方法使用了不一样的 URL 参数命名风格
+            @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
             HttpServletRequest request,
             HttpServletResponse response) {
         
@@ -136,9 +149,10 @@ public class SocialLoginController {
                 return ResponseEntity.status(401).body(errorResponse);
             }
 
-            // 🔒 安全升级：使用Cookie安全模式，不在响应中暴露refresh_token
+            // 兼容模式控制：legacyMode=true时在响应体中返回refresh_token（微信小程序），false时仅使用Cookie（Web）
+            boolean cookieMode = !legacyMode; // legacyMode=true -> cookieMode=false (返回refresh_token)
             ResponseEntity<Map<String, Object>> result = oAuth2AuthenticationHelper.processRefreshToken(
-                grantType, refreshTokenValue, clientId, clientSecret, request, true);
+                grantType, refreshTokenValue, clientId, clientSecret, request, cookieMode);
 
             // 🔒 安全升级：如果刷新成功，从header读取新的refresh_token并更新Cookie
             if (result.getStatusCode().is2xxSuccessful()) {

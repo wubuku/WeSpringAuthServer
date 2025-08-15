@@ -35,7 +35,7 @@ OPTIONS:
     -h, --help               Show this help message
     -i, --interactive        Interactive mode - prompt for code input
     --cookie-mode             Enable Cookie-based authentication testing (default)
-    --legacy-mode             Test legacy parameter-based authentication
+    --legacy-mode             Test legacyMode=true (response body includes refresh_token)
     
 EXAMPLES:
     $0 --login-code "0b1N85100T85rU15aE000urgLn2N851x" --mobile-code "abc123def456"
@@ -433,6 +433,10 @@ test_wechat_login() {
             local encoded_mobile_code=$(urlencode "$WECHAT_MOBILE_CODE")
             wechat_url="${wechat_url}&mobileCode=${encoded_mobile_code}"
         fi
+        # legacy 模式：让服务端在响应体返回 refresh_token
+        if [[ "$COOKIE_MODE" != "true" ]]; then
+            wechat_url="${wechat_url}&legacyMode=true"
+        fi
         
         # 🔒 安全升级：使用Cookie支持的curl命令
         local wechat_response=$(curl -s -X GET \
@@ -481,6 +485,21 @@ EOF
                     # Display token information
                     echo -e "\n${BLUE}WeChat Login Response:${NC}"
                     echo "$response_body" | jq '.'
+
+                    # 模式一致性检查
+                    if [[ "$COOKIE_MODE" == "true" ]]; then
+                        if [[ -n "$refresh_token" && "$refresh_token" != "null" ]]; then
+                            print_result "warning" "(Non-expected) Response body contains refresh_token in Cookie mode"
+                        else
+                            print_result "info" "Cookie mode: refresh_token stored in HttpOnly Cookie"
+                        fi
+                    else
+                        if [[ -z "$refresh_token" || "$refresh_token" == "null" ]]; then
+                            print_result "warning" "LEGACY mode expected refresh_token in response body, but none found"
+                        else
+                            print_result "success" "LEGACY mode: refresh_token received"
+                        fi
+                    fi
                     
                     # 🔒 安全升级：测试Cookie功能
                     if [[ "$COOKIE_MODE" == "true" ]]; then
@@ -537,24 +556,25 @@ test_refresh_token() {
             -d "scope=openid%20profile" \
             -w "\n%{http_code}")
     else
-        # Legacy mode for backward compatibility testing
-        print_result "info" "⚠️  Testing legacy parameter-based refresh token (backward compatibility)"
+        # LEGACY 模式：响应体返回 refresh_token（legacyMode=true），显式传递 refresh_token 参数
+        print_result "info" "⚠️  Testing legacyMode=true (response body should include refresh_token)"
         
         if [ -z "$WECHAT_REFRESH_TOKEN" ] || [ "$WECHAT_REFRESH_TOKEN" = "null" ]; then
-            print_result "error" "No refresh token available for legacy testing"
+            print_result "error" "No refresh token available for legacy refresh"
             return 1
         fi
         
         print_result "info" "Using refresh token: ${WECHAT_REFRESH_TOKEN:0:50}..."
         
-        # Legacy mode: pass refresh_token and client_secret as parameters
         local refresh_response=$(curl -s -X POST "${BASE_URL}/wechat/refresh-token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
-            -H "Authorization: Basic $(echo -n 'ffv-client:secret' | base64)" \
             -H "Accept: application/json" \
+            --cookie-jar "$COOKIE_JAR" \
+            --cookie "$COOKIE_JAR" \
             -d "grant_type=refresh_token" \
+            -d "client_id=ffv-client" \
             -d "refresh_token=$(urlencode "$WECHAT_REFRESH_TOKEN")" \
-            -d "scope=openid%20profile" \
+            -d "legacyMode=true" \
             -w "\n%{http_code}")
     fi
     
@@ -580,9 +600,19 @@ test_refresh_token() {
                 
                 # Update exported variables
                 export WECHAT_ACCESS_TOKEN="$new_access_token"
-                if [ -n "$new_refresh_token" ] && [ "$new_refresh_token" != "null" ]; then
-                    export WECHAT_REFRESH_TOKEN="$new_refresh_token"
-                    print_result "success" "New refresh token received: ${new_refresh_token:0:50}..."
+                if [[ "$COOKIE_MODE" == "true" ]]; then
+                    if [ -n "$new_refresh_token" ] && [ "$new_refresh_token" != "null" ]; then
+                        print_result "warning" "(Non-expected) Response body includes refresh_token in Cookie mode"
+                    else
+                        print_result "info" "Cookie mode: new refresh_token rotated via Set-Cookie (header X-New-Refresh-Token)"
+                    fi
+                else
+                    if [ -n "$new_refresh_token" ] && [ "$new_refresh_token" != "null" ]; then
+                        export WECHAT_REFRESH_TOKEN="$new_refresh_token"
+                        print_result "success" "LEGACY mode: new refresh token received: ${new_refresh_token:0:50}..."
+                    else
+                        print_result "warning" "LEGACY mode expected new refresh_token in response body, but none found"
+                    fi
                 fi
                 
                 echo -e "\n${BLUE}Refresh Token Response:${NC}"

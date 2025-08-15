@@ -185,8 +185,10 @@ sms_login() {
     touch "$COOKIE_JAR"
     
     # 显示即将执行的curl命令
+    local LEGACY_QS=""
+    if [[ "$LEGACY_MODE" == "1" ]]; then LEGACY_QS="&legacyMode=true"; fi
     local curl_cmd="curl -s -w \"\\n%{http_code}\" -X GET \\
-        \"$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE\" \\
+        \"$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE$LEGACY_QS\" \\
         --cookie-jar \"$COOKIE_JAR\" \\
         --cookie \"$COOKIE_JAR\""
     
@@ -195,7 +197,7 @@ sms_login() {
     
     # 🔒 安全升级：使用Cookie支持
     RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
-        "$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE" \
+        "$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE$LEGACY_QS" \
         --cookie-jar "$COOKIE_JAR" \
         --cookie "$COOKIE_JAR")
     
@@ -247,10 +249,18 @@ EOF
             echo -e "${GREEN}SMS登录成功 - 令牌详细信息${NC}"
             echo -e "${GREEN}========================================${NC}"
             echo -e "${CYAN}访问令牌 (前50字符):${NC} ${ACCESS_TOKEN:0:50}..."
-            if [ "$REFRESH_TOKEN" != "null" ] && [ -n "$REFRESH_TOKEN" ]; then
-                echo -e "${CYAN}刷新令牌 (前50字符):${NC} ${REFRESH_TOKEN:0:50}..."
+            if [[ "$LEGACY_MODE" == "1" ]]; then
+                if [ "$REFRESH_TOKEN" != "null" ] && [ -n "$REFRESH_TOKEN" ]; then
+                    echo -e "${CYAN}刷新令牌 (前50字符):${NC} ${REFRESH_TOKEN:0:50}..."
+                else
+                    echo -e "${RED}❌ LEGACY 模式期望响应体含 refresh_token，但未返回${NC}"
+                fi
             else
-                echo -e "${YELLOW}刷新令牌:${NC} 已存储在HttpOnly Cookie中 (安全模式)"
+                if [ "$REFRESH_TOKEN" != "null" ] && [ -n "$REFRESH_TOKEN" ]; then
+                    echo -e "${YELLOW}⚠️  (非预期) 响应体包含刷新令牌，当前为 Cookie 模式${NC}"
+                else
+                    echo -e "${YELLOW}刷新令牌:${NC} 已存储在HttpOnly Cookie中 (安全模式)"
+                fi
             fi
             echo -e "${CYAN}令牌类型:${NC} $TOKEN_TYPE"
             echo -e "${CYAN}过期时间:${NC} $EXPIRES_IN 秒"
@@ -337,14 +347,32 @@ test_refresh_token() {
     echo -e "${YELLOW}$curl_cmd${NC}"
     
     # 🔒 安全升级：使用Cookie模式刷新token
-    RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-        "$BASE_URL/sms/refresh-token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -H "Accept: application/json" \
-        --cookie-jar "$COOKIE_JAR" \
-        --cookie "$COOKIE_JAR" \
-        -d "grant_type=refresh_token" \
-        -d "scope=openid%20profile")
+    if [[ "$LEGACY_MODE" == "1" ]]; then
+        # 兼容模式：显式传入 refresh_token 与 legacyMode=true
+        if [[ -z "$SMS_REFRESH_TOKEN" || "$SMS_REFRESH_TOKEN" == "null" ]]; then
+            log_warn "⚠️  未检测到本地保存的 refresh_token，将尝试从登录响应体读取（若登录已在legacy模式）"
+        fi
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "$BASE_URL/sms/refresh-token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "Accept: application/json" \
+            --cookie-jar "$COOKIE_JAR" \
+            --cookie "$COOKIE_JAR" \
+            -d "grant_type=refresh_token" \
+            -d "client_id=ffv-client" \
+            -d "refresh_token=${SMS_REFRESH_TOKEN}" \
+            -d "legacyMode=true")
+    else
+        # Cookie 模式
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "$BASE_URL/sms/refresh-token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "Accept: application/json" \
+            --cookie-jar "$COOKIE_JAR" \
+            --cookie "$COOKIE_JAR" \
+            -d "grant_type=refresh_token" \
+            -d "scope=openid%20profile")
+    fi
     
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
     BODY=$(echo "$RESPONSE" | sed '$d')
@@ -364,11 +392,19 @@ test_refresh_token() {
             log_info "✅ 获得新的访问令牌: ${NEW_ACCESS_TOKEN:0:50}..."
             export SMS_ACCESS_TOKEN="$NEW_ACCESS_TOKEN"
             
-            if [ "$NEW_REFRESH_TOKEN" != "null" ] && [ -n "$NEW_REFRESH_TOKEN" ]; then
-                log_info "✅ 获得新的刷新令牌: ${NEW_REFRESH_TOKEN:0:50}..."
-                export SMS_REFRESH_TOKEN="$NEW_REFRESH_TOKEN"
+            if [[ "$LEGACY_MODE" == "1" ]]; then
+                if [ "$NEW_REFRESH_TOKEN" != "null" ] && [ -n "$NEW_REFRESH_TOKEN" ]; then
+                    log_info "✅ 获得新的刷新令牌: ${NEW_REFRESH_TOKEN:0:50}..."
+                    export SMS_REFRESH_TOKEN="$NEW_REFRESH_TOKEN"
+                else
+                    log_warn "⚠️  LEGACY 模式期望响应体含 refresh_token，但未找到"
+                fi
             else
-                log_info "🍪 刷新令牌已更新到HttpOnly Cookie中 (安全模式)"
+                if [ "$NEW_REFRESH_TOKEN" != "null" ] && [ -n "$NEW_REFRESH_TOKEN" ]; then
+                    log_info "✅ (非预期) 响应体包含刷新令牌: ${NEW_REFRESH_TOKEN:0:50}..."
+                else
+                    log_info "🍪 刷新令牌已更新到HttpOnly Cookie中 (安全模式)"
+                fi
             fi
         else
             log_error "❌ 未能从刷新响应中提取新的访问令牌"
@@ -444,10 +480,27 @@ trap cleanup EXIT
 
 # 主流程
 main() {
-    log_info "开始SMS登录端到端测试 (支持Cookie刷新token)"
+    # 解析可选参数：--legacy-mode | -L 启用 legacyMode
+    LEGACY_MODE=0
+    PHONE_ARG=""
+    if [[ "$1" == "--legacy-mode" || "$1" == "-L" || "$1" == "legacy" ]]; then
+        LEGACY_MODE=1
+        PHONE_ARG="$2"
+    else
+        PHONE_ARG="$1"
+        if [[ "$2" == "--legacy-mode" || "$2" == "-L" || "$2" == "legacy" ]]; then
+            LEGACY_MODE=1
+        fi
+    fi
+
+    if [[ $LEGACY_MODE -eq 1 ]]; then
+        log_info "开始SMS登录端到端测试 (LEGACY 模式：响应体返回 refresh_token)"
+    else
+        log_info "开始SMS登录端到端测试 (Cookie 模式：refresh_token 存于 HttpOnly Cookie)"
+    fi
     
     # 获取手机号
-    get_phone_number "$1"
+    get_phone_number "$PHONE_ARG"
     
     # 测试数据库连接
     if ! test_database; then
@@ -477,7 +530,7 @@ main() {
     # 测试API访问
     test_api_access
     
-    log_info "🎉 SMS登录端到端测试完成 (包含Cookie刷新token测试)"
+    log_info "🎉 SMS登录端到端测试完成 (模式：$([[ $LEGACY_MODE -eq 1 ]] && echo LEGACY || echo Cookie))"
 }
 
 # 执行主流程
