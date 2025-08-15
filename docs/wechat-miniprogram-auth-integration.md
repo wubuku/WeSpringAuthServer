@@ -1,18 +1,143 @@
-### 微信小程序接入 WeSpring Auth Server（短信登录 + HttpOnly Cookie 刷新）实战指南
+### 微信小程序接入 WeSpring Auth Server（微信登录 + 短信登录 + HttpOnly Cookie 刷新）实战指南
 
-本文档面向微信小程序前端开发，指导如何对接本认证服务器的“短信验证码登录”与“基于 HttpOnly Cookie 的 refresh_token 自动刷新”能力，涵盖端到端测试方法、常见问题排查以及生产注意事项。
+本文档面向微信小程序前端开发，指导如何对接本认证服务器的"微信登录"、"短信验证码登录"与"基于 HttpOnly Cookie 的 refresh_token 自动刷新"能力，涵盖端到端测试方法、常见问题排查以及生产注意事项。
 
 ---
 
 #### 能力概览
-- 短信验证码登录（/sms/auth 与 /sms/login）
-- access_token 短时有效；refresh_token 安全地写入 HttpOnly Cookie
-- 刷新接口（/sms/refresh-token）从 Cookie 读取 refresh_token 并自动更新 Cookie
-- 可选：应用商店审核“测试手机号 + 固定验证码”直登（仅测试环境）
+- **微信登录**（/wechat/login）- 使用微信授权码直接登录
+- **短信验证码登录**（/sms/auth 与 /sms/login）- 传统手机号验证码登录
+- **统一Token机制**：access_token 短时有效；refresh_token 安全地写入 HttpOnly Cookie
+- **统一刷新接口**：
+  - `/wechat/refresh-token` - 微信登录专用刷新端点
+  - `/sms/refresh-token` - SMS登录专用刷新端点
+- **Cookie安全策略**：从 Cookie 读取 refresh_token 并自动更新 Cookie
+- 可选：应用商店审核"测试手机号 + 固定验证码"直登（仅测试环境）
 
 ---
 
-## 1. 服务端准备
+## 1. 微信登录集成指南
+
+### 1.1 微信登录流程概述
+
+微信登录提供了一种更便捷的用户认证方式，用户无需输入手机号和验证码，直接使用微信授权即可完成登录。
+
+**微信登录流程：**
+1. 小程序调用 `wx.login()` 获取临时授权码（code）
+2. 将授权码发送到认证服务器的 `/wechat/login` 端点
+3. 服务器使用授权码向微信服务器验证用户身份
+4. 验证成功后返回 `access_token`，`refresh_token` 自动存储在 HttpOnly Cookie 中
+5. 后续API调用使用 `access_token`，token过期时自动使用Cookie中的 `refresh_token` 刷新
+
+### 1.2 微信登录端点
+
+```javascript
+// 微信小程序端代码示例
+wx.login({
+  success: function(res) {
+    if (res.code) {
+      // 发送 res.code 到后台换取 access_token
+      wx.request({
+        url: 'https://your-auth-server.com/wechat/login',
+        method: 'GET',
+        data: {
+          loginCode: res.code,
+          clientId: 'ffv-client',  // 可选，默认为 ffv-client
+          mobileCode: '',          // 可选，如需绑定手机号
+          referrerId: ''           // 可选，推荐人ID
+        },
+        success: function(loginRes) {
+          if (loginRes.statusCode === 200) {
+            // 登录成功，access_token 在响应中
+            // refresh_token 已自动存储在 HttpOnly Cookie 中
+            const accessToken = loginRes.data.access_token;
+            
+            // 存储 access_token 用于后续API调用
+            wx.setStorageSync('access_token', accessToken);
+            
+            console.log('微信登录成功');
+          }
+        }
+      });
+    }
+  }
+});
+```
+
+### 1.3 微信Token刷新
+
+当 `access_token` 过期时，使用专用的微信刷新端点：
+
+```javascript
+// 刷新 access_token
+function refreshWeChatToken() {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: 'https://your-auth-server.com/wechat/refresh-token',
+      method: 'POST',
+      data: {
+        grant_type: 'refresh_token',
+        client_id: 'ffv-client'
+        // 注意：不需要传递 refresh_token，它会从 HttpOnly Cookie 中自动读取
+      },
+      success: function(res) {
+        if (res.statusCode === 200) {
+          // 刷新成功，新的 refresh_token 已自动更新到 Cookie
+          const newAccessToken = res.data.access_token;
+          wx.setStorageSync('access_token', newAccessToken);
+          resolve(newAccessToken);
+        } else {
+          reject(new Error('Token刷新失败'));
+        }
+      },
+      fail: reject
+    });
+  });
+}
+
+// 自动重试的API调用封装
+function apiRequest(options) {
+  const accessToken = wx.getStorageSync('access_token');
+  
+  return new Promise((resolve, reject) => {
+    wx.request({
+      ...options,
+      header: {
+        ...options.header,
+        'Authorization': `Bearer ${accessToken}`
+      },
+      success: function(res) {
+        if (res.statusCode === 401) {
+          // Token过期，尝试刷新
+          refreshWeChatToken().then(newToken => {
+            // 使用新token重试请求
+            wx.request({
+              ...options,
+              header: {
+                ...options.header,
+                'Authorization': `Bearer ${newToken}`
+              },
+              success: resolve,
+              fail: reject
+            });
+          }).catch(reject);
+        } else {
+          resolve(res);
+        }
+      },
+      fail: reject
+    });
+  });
+}
+```
+
+---
+
+## 2. 短信登录集成指南（传统方式）
+
+短信登录适用于需要验证用户手机号的场景，或作为微信登录的补充认证方式。
+
+### 2.1 服务端准备
 
 确保生产环境启用 Cookie 模式，并正确配置 Cookie 属性与 HTTPS：
 
@@ -146,7 +271,113 @@ wx.request({
 });
 ```
 
-### 3.4 携带 Bearer 访问受保护 API
+---
+
+## 3. 微信登录 vs SMS登录 对比与选择指南
+
+### 3.1 功能对比
+
+| 特性                  | 微信登录 (`/wechat/login`) | SMS登录 (`/sms/auth` + `/sms/login`) |
+| --------------------- | -------------------------- | ------------------------------------ |
+| **用户体验**          | 一键登录，无需输入         | 需要输入手机号和验证码               |
+| **安全性**            | 依赖微信平台认证           | 手机号短信验证                       |
+| **refresh_token支持** | ✅ 完全支持                 | ✅ 完全支持                           |
+| **HttpOnly Cookie**   | ✅ 自动存储                 | ✅ 自动存储                           |
+| **刷新端点**          | `/wechat/refresh-token`    | `/sms/refresh-token`                 |
+| **适用场景**          | 微信生态内应用             | 通用手机号验证                       |
+| **离线使用**          | 需要微信授权               | 独立于第三方平台                     |
+
+### 3.2 Token机制统一性
+
+**两种登录方式的Token机制完全一致：**
+
+1. **Token生成**：都使用相同的OAuth2 Token生成器
+2. **存储方式**：refresh_token都存储在HttpOnly Cookie中
+3. **安全策略**：都不在响应中暴露refresh_token
+4. **刷新机制**：都支持自动从Cookie读取refresh_token进行刷新
+5. **过期时间**：access_token (1小时)，refresh_token (24小时)
+
+### 3.3 最佳实践建议
+
+#### 推荐的登录策略
+
+```javascript
+// 推荐：优先微信登录，SMS登录作为备选
+async function smartLogin() {
+  try {
+    // 1. 尝试微信登录
+    const wechatResult = await attemptWeChatLogin();
+    if (wechatResult.success) {
+      return { method: 'wechat', token: wechatResult.access_token };
+    }
+  } catch (error) {
+    console.log('微信登录失败，降级到SMS登录');
+  }
+  
+  // 2. 降级到SMS登录
+  try {
+    const smsResult = await attemptSMSLogin();
+    return { method: 'sms', token: smsResult.access_token };
+  } catch (error) {
+    throw new Error('所有登录方式都失败');
+  }
+}
+
+// 统一的Token刷新处理
+async function refreshToken(loginMethod) {
+  const endpoint = loginMethod === 'wechat' 
+    ? '/wechat/refresh-token' 
+    : '/sms/refresh-token';
+    
+  return wx.request({
+    url: `https://your-auth-server.com${endpoint}`,
+    method: 'POST',
+    data: {
+      grant_type: 'refresh_token',
+      client_id: 'ffv-client'
+    }
+  });
+}
+```
+
+#### 生产环境配置要点
+
+```bash
+# 微信登录需要的额外配置
+WECHAT_APP_ID=your_wechat_app_id
+WECHAT_APP_SECRET=your_wechat_app_secret
+
+# 通用Cookie安全配置（两种登录方式共用）
+OAUTH2_COOKIE_MODE_ENABLED=true
+OAUTH2_COOKIE_DOMAIN=.your-domain.com
+OAUTH2_COOKIE_SECURE=true
+OAUTH2_COOKIE_SAME_SITE=None
+```
+
+### 3.4 错误处理统一化
+
+```javascript
+// 统一的错误处理函数
+function handleAuthError(error, loginMethod) {
+  const methodName = loginMethod === 'wechat' ? '微信登录' : 'SMS登录';
+  
+  if (error.statusCode === 401) {
+    console.log(`${methodName}: Token已过期，尝试刷新`);
+    return refreshToken(loginMethod);
+  } else if (error.statusCode === 400) {
+    console.log(`${methodName}: 请求参数错误`);
+    // 重新引导用户登录
+  } else {
+    console.log(`${methodName}: 服务器错误`);
+  }
+}
+```
+
+---
+
+## 4. API调用与Token管理
+
+### 4.1 携带 Bearer 访问受保护 API
 ```javascript
 const BASE_URL = 'https://iam.ruichuangqi.com';
 const token = wx.getStorageSync('ACCESS_TOKEN');
