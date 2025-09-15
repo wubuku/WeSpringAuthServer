@@ -130,6 +130,20 @@ bash scripts/get-test-user-tokens.sh
 bash scripts/generate-jwt-keystore.sh
 ```
 
+## 🐳 Docker 构建
+
+### `docker-build-push.sh`
+**本地Docker构建脚本** - 替代GitHub Actions的本地构建方案
+
+```bash
+# 设置环境变量
+export DOCKERHUB_USERNAME="your_username"
+export DOCKERHUB_TOKEN="your_token"
+
+# 构建并推送到DockerHub
+bash scripts/docker-build-push.sh
+```
+
 ## 📊 测试数据和配置
 
 ### 环境变量文件
