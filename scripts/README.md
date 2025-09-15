@@ -142,7 +142,12 @@ export DOCKERHUB_TOKEN="your_token"
 
 # 构建并推送到DockerHub
 bash scripts/docker-build-push.sh
+
+# 构建完成后，从DockerHub拉取镜像
+docker pull --platform linux/amd64 your_username/wespring-auth-server:latest
 ```
+
+**注意**: 在macOS上构建推送后，需要重新pull镜像才能在本地使用。使用 `--platform linux/amd64` 确保拉取正确的架构版本。
 
 ## 📊 测试数据和配置
 
