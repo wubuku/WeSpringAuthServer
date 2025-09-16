@@ -406,6 +406,40 @@ test_refresh_token() {
                     log_info "🍪 刷新令牌已更新到HttpOnly Cookie中 (安全模式)"
                 fi
             fi
+            
+            # 解码并显示刷新后的JWT内容
+            echo -e "\n${BLUE}📝 解析刷新后的访问令牌 (Refreshed Access Token) 内容:${NC}"
+            IFS='.' read -r header payload signature <<< "$NEW_ACCESS_TOKEN"
+            echo -e "\n${YELLOW}🔍 JWT Header:${NC}"
+            header_decoded=$(decode_jwt "$header")
+            if [ $? -eq 0 ] && [ -n "$header_decoded" ]; then
+                echo "$header_decoded" | jq '.' 2>/dev/null || echo "$header_decoded"
+            else
+                echo "❌ 无法解码JWT Header"
+            fi
+            echo -e "\n${YELLOW}🔍 JWT Payload (Claims):${NC}"
+            payload_decoded=$(decode_jwt "$payload")
+            if [ $? -eq 0 ] && [ -n "$payload_decoded" ]; then
+                echo "$payload_decoded" | jq '.' 2>/dev/null || echo "$payload_decoded"
+                # 高亮 groups
+                groups=$(echo "$payload_decoded" | jq -r '.groups // empty' 2>/dev/null)
+                if [ -n "$groups" ] && [ "$groups" != "null" ]; then
+                    echo -e "\n${GREEN}✅ (Refreshed) Groups信息:${NC}"
+                    echo "$groups" | jq '.' 2>/dev/null || echo "$groups"
+                else
+                    echo -e "\n${RED}❌ (Refreshed) JWT中缺少groups信息${NC}"
+                fi
+                # 高亮 authorities
+                authorities=$(echo "$payload_decoded" | jq -r '.authorities // empty' 2>/dev/null)
+                if [ -n "$authorities" ] && [ "$authorities" != "null" ]; then
+                    echo -e "\n${GREEN}✅ (Refreshed) Authorities信息:${NC}"
+                    echo "$authorities" | jq '.' 2>/dev/null || echo "$authorities"
+                else
+                    echo -e "\n${YELLOW}⚠️  (Refreshed) JWT中没有authorities信息（这可能是正常的）${NC}"
+                fi
+            else
+                echo "❌ 无法解码JWT Payload"
+            fi
         else
             log_error "❌ 未能从刷新响应中提取新的访问令牌"
             return 1

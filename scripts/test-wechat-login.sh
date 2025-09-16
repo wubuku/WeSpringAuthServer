@@ -623,6 +623,39 @@ test_refresh_token() {
                     test_cookie_functionality
                 fi
                 
+                # 解码并显示刷新后的JWT内容
+                echo -e "\n${BLUE}WeChat Refreshed Access Token (decoded):${NC}"
+                header=$(echo "$new_access_token" | cut -d"." -f1)
+                payload=$(echo "$new_access_token" | cut -d"." -f2)
+                echo -e "\n${YELLOW}🔍 JWT Header:${NC}"
+                header_decoded=$(decode_jwt "$header")
+                if [ -n "$header_decoded" ]; then
+                    echo "$header_decoded" | jq '.' 2>/dev/null || echo "$header_decoded"
+                else
+                    echo "❌ Failed to decode JWT header"
+                fi
+                echo -e "\n${YELLOW}🔍 JWT Payload (Claims):${NC}"
+                payload_decoded=$(decode_jwt "$payload")
+                if [ -n "$payload_decoded" ]; then
+                    echo "$payload_decoded" | jq '.' 2>/dev/null || echo "$payload_decoded"
+                    groups=$(echo "$payload_decoded" | jq -r '.groups // empty' 2>/dev/null)
+                    if [ -n "$groups" ] && [ "$groups" != "null" ]; then
+                        echo -e "\n${GREEN}✅ (Refreshed) Groups:${NC}"
+                        echo "$groups" | jq '.' 2>/dev/null || echo "$groups"
+                    else
+                        echo -e "\n${RED}❌ (Refreshed) Missing groups in JWT${NC}"
+                    fi
+                    authorities=$(echo "$payload_decoded" | jq -r '.authorities // empty' 2>/dev/null)
+                    if [ -n "$authorities" ] && [ "$authorities" != "null" ]; then
+                        echo -e "\n${GREEN}✅ (Refreshed) Authorities:${NC}"
+                        echo "$authorities" | jq '.' 2>/dev/null || echo "$authorities"
+                    else
+                        echo -e "\n${YELLOW}⚠️  (Refreshed) No authorities in JWT (may be normal)${NC}"
+                    fi
+                else
+                    echo "❌ Failed to decode JWT payload"
+                fi
+                
                 return 0
             else
                 print_result "error" "No new access token in refresh response"

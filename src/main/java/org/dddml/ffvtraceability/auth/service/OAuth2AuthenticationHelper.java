@@ -90,6 +90,9 @@ public class OAuth2AuthenticationHelper {
     @Autowired
     private AuthorizationServerSettings authorizationServerSettings;
 
+    @Autowired
+    private UserService userService;
+
     /**
      * 获取注册客户端
      */
@@ -130,14 +133,16 @@ public class OAuth2AuthenticationHelper {
      */
     public OAuth2Authorization createAndSaveAuthorization(RegisteredClient registeredClient,
                                                           CustomUserDetails userDetails,
-                                                          TokenPair tokenPair) {
+                                                          TokenPair tokenPair,
+                                                          Authentication authentication) {
         OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization
                 .withRegisteredClient(registeredClient)
                 .principalName(userDetails.getUsername())
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizedScopes(DEFAULT_SCOPES)
                 .accessToken(tokenPair.getAccessToken())
-                .refreshToken(tokenPair.getRefreshToken());
+                .refreshToken(tokenPair.getRefreshToken())
+                .attribute(Authentication.class.getName(), authentication);
 
         OAuth2Authorization authorization = authorizationBuilder.build();
 
@@ -225,11 +230,14 @@ public class OAuth2AuthenticationHelper {
             // Validate refresh token
             OAuth2Authorization authorization = validateRefreshToken(refreshTokenValue, registeredClient);
 
-            // Generate new access token
-            OAuth2AccessToken newAccessToken = generateNewAccessToken(registeredClient, authorization);
+            // Ensure Authentication exists with authorities/groups
+            Authentication authentication = getOrRebuildAuthentication(authorization);
 
-            // Update authorization with new token
-            updateAuthorizationWithNewToken(authorization, newAccessToken);
+            // Generate new access token using REFRESH_TOKEN grant
+            OAuth2AccessToken newAccessToken = generateNewAccessToken(registeredClient, authorization, authentication);
+
+            // Update authorization with new token and persist Authentication for future refreshes
+            updateAuthorizationWithNewToken(authorization, newAccessToken, authentication);
 
             // Return success response
             OAuth2RefreshToken refreshToken = authorization.getRefreshToken().getToken();
@@ -476,15 +484,8 @@ public class OAuth2AuthenticationHelper {
     }
 
     private OAuth2AccessToken generateNewAccessToken(RegisteredClient registeredClient,
-                                                     OAuth2Authorization authorization) {
-        // Create authentication from authorization
-        Authentication authentication = authorization.getAttribute(Authentication.class.getName());
-        if (authentication == null) {
-            // Fallback: create a simple authentication if not found
-            authentication = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-                    authorization.getPrincipalName(), null);
-        }
-
+                                                     OAuth2Authorization authorization,
+                                                     Authentication authentication) {
         OAuth2TokenContext tokenContext = createTokenContext(
                 registeredClient, authentication, AuthorizationGrantType.REFRESH_TOKEN,
                 OAuth2TokenType.ACCESS_TOKEN, authorization.getAuthorizedScopes());
@@ -498,13 +499,40 @@ public class OAuth2AuthenticationHelper {
         return convertToAccessToken(generatedToken, authorization.getAuthorizedScopes());
     }
 
-    private void updateAuthorizationWithNewToken(OAuth2Authorization authorization, OAuth2AccessToken newAccessToken) {
+    private void updateAuthorizationWithNewToken(OAuth2Authorization authorization,
+                                                 OAuth2AccessToken newAccessToken,
+                                                 Authentication authentication) {
         OAuth2Authorization updatedAuthorization = OAuth2Authorization.from(authorization)
+                .attribute(Authentication.class.getName(), authentication)
                 .accessToken(newAccessToken)
                 .build();
 
         authorizationService.save(updatedAuthorization);
-        logger.debug("Updated authorization with new access token: {}", authorization.getId());
+        logger.debug("Updated authorization with new access token and persisted Authentication: {}", authorization.getId());
+    }
+
+    /**
+     * 获取或重建带权限与groups信息的Authentication，并在缺失时持久化到Authorization中
+     */
+    private Authentication getOrRebuildAuthentication(OAuth2Authorization authorization) {
+        Authentication authentication = authorization.getAttribute(Authentication.class.getName());
+        boolean needsRebuild = (authentication == null || authentication.getAuthorities() == null || authentication.getAuthorities().isEmpty());
+        if (!needsRebuild) {
+            return authentication;
+        }
+
+        String username = authorization.getPrincipalName();
+        CustomUserDetails userDetails = userService.getUserDetails(username);
+        Authentication rebuilt = org.dddml.ffvtraceability.auth.authentication.AuthenticationUtils
+                .createAuthenticatedToken(userDetails, userDetails);
+
+        // 持久化回Authorization，避免下次刷新再次缺失
+        OAuth2Authorization updated = OAuth2Authorization.from(authorization)
+                .attribute(Authentication.class.getName(), rebuilt)
+                .build();
+        authorizationService.save(updated);
+        logger.debug("Rebuilt and persisted Authentication for principal: {}", username);
+        return rebuilt;
     }
 
     private ResponseEntity<Map<String, Object>> createTokenResponse(OAuth2AccessToken accessToken,

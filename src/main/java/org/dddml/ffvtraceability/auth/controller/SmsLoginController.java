@@ -153,7 +153,7 @@ public class SmsLoginController {
             RegisteredClient registeredClient = oAuth2AuthenticationHelper.getRegisteredClient(clientId);
 
             OAuth2AuthenticationHelper.TokenPair tokenPair = oAuth2AuthenticationHelper.generateTokenPair(registeredClient, authentication);
-            oAuth2AuthenticationHelper.createAndSaveAuthorization(registeredClient, userDetails, tokenPair);
+            oAuth2AuthenticationHelper.createAndSaveAuthorization(registeredClient, userDetails, tokenPair, authentication);
 
             // 🔒 安全升级：设置HttpOnly Cookie存储refresh_token
             cookieSecurityConfig.setRefreshTokenCookie(response, tokenPair.getRefreshToken().getTokenValue());

@@ -17,7 +17,8 @@ CLIENT_SECRET="secret"
 CLIENT_CREDENTIALS_B64=$(echo -n "${CLIENT_ID}:${CLIENT_SECRET}" | base64)
 
 # 🔧 测试配置开关
-TEST_REFRESH_TOKEN=false  # 设置为 false 可跳过刷新token测试
+# 环境变量优先：若外部已设置 TEST_REFRESH_TOKEN，则使用其值；否则默认 false
+TEST_REFRESH_TOKEN="${TEST_REFRESH_TOKEN:-false}"  # 设置为 false 可跳过刷新token测试
 
 echo "🧪 OAuth2测试客户端凭据 (仅用于测试!):"
 echo "   Client ID: $CLIENT_ID"
