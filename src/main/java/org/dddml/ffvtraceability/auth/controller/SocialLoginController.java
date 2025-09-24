@@ -13,6 +13,7 @@ import org.dddml.ffvtraceability.auth.service.WeChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -36,8 +37,11 @@ import java.util.Map;
 public class SocialLoginController {
 
     // Constants
-    private static final String DEFAULT_CLIENT_ID = "ffv-client";
     private static final String MSG_WECHAT_AUTH_FAILED = "WeChat authentication failed: ";
+
+    // Configurable properties
+    @Value("${auth-server.default-client-id}")
+    private String defaultClientId;
 
     // Exception constants
     private static final String EXCEPTION_WECHAT_LOGIN_CODE_EMPTY = "WeChat login code is empty"; // "微信小程序登录 Code 不能为空";
@@ -72,7 +76,7 @@ public class SocialLoginController {
      * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @GetMapping("/wechat/login")
-    public void wechatLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+    public void wechatLogin(@RequestParam(value = "clientId", required = false) String clientId,
                             @RequestParam("loginCode") String loginCode,
                             @RequestParam(value = "mobileCode", required = false) String mobileCode,
                             @RequestParam(value = "referrerId", required = false) String referrerId,
@@ -80,6 +84,11 @@ public class SocialLoginController {
                             HttpServletResponse response) throws IOException {
         try {
             validateLoginParameters(loginCode, mobileCode);
+
+            // 使用配置的默认客户端ID
+            if (clientId == null || clientId.trim().isEmpty()) {
+                clientId = defaultClientId;
+            }
 
             CustomUserDetails userDetails = weChatService.processWeChatLogin(loginCode, mobileCode, referrerId);
             Authentication authentication = createAuthentication(userDetails);
@@ -125,12 +134,17 @@ public class SocialLoginController {
     public ResponseEntity<Map<String, Object>> refreshToken(
             @RequestParam(value = "grant_type", required = false) String grantType,
             @RequestParam(value = "refresh_token", required = false) String refreshTokenFromParam,
-            @RequestParam(value = "client_id", defaultValue = DEFAULT_CLIENT_ID) String clientId, // 注意这个方法使用了不一样的 URL 参数命名风格
+            @RequestParam(value = "client_id", required = false) String clientId, // 注意这个方法使用了不一样的 URL 参数命名风格
             @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
             HttpServletRequest request,
             HttpServletResponse response) {
         
         try {
+            // 使用配置的默认客户端ID
+            if (clientId == null || clientId.trim().isEmpty()) {
+                clientId = defaultClientId;
+            }
+
             // 🔒 安全升级：优先从Cookie读取refresh_token
             String refreshTokenValue = cookieSecurityConfig.getRefreshTokenFromCookie(request);
             if (refreshTokenValue == null && refreshTokenFromParam != null) {
