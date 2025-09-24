@@ -47,6 +47,21 @@ base64url_encode() {
     base64 | tr '/+' '_-' | tr -d '='
 }
 
+# 字符串重复函数（兼容 macOS/Linux，避免 seq 命令依赖）
+repeat_string() {
+    local str="$1"
+    local count="$2"
+    local result=""
+    local i=0
+
+    while [ $i -lt $count ]; do
+        result="${result}${str}"
+        i=$((i + 1))
+    done
+
+    echo "$result"
+}
+
 # URL encode function
 urlencode() {
     python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
@@ -335,13 +350,13 @@ echo "export ACCESS_TOKEN=$access_token" > tokens.env
 echo "export REFRESH_TOKEN=$refresh_token" >> tokens.env
 echo "export ID_TOKEN=$id_token" >> tokens.env
 
-# 对于 macOS，使用 gbase64
+# JWT 解码函数（兼容 macOS/Linux）
 if [[ "$OSTYPE" == "darwin"* ]]; then
     decode_jwt() {
         local jwt_part=$1
         local pad=$(( 4 - ${#jwt_part} % 4 ))
         if [ $pad -ne 4 ]; then
-            jwt_part="${jwt_part}$(printf '=%.0s' $(seq 1 $pad))"
+            jwt_part="${jwt_part}$(repeat_string '=' $pad)"
         fi
         jwt_part=$(echo "$jwt_part" | tr '_-' '/+')
         echo "$jwt_part" | gbase64 -d 2>/dev/null
@@ -351,7 +366,7 @@ else
         local jwt_part=$1
         local pad=$(( 4 - ${#jwt_part} % 4 ))
         if [ $pad -ne 4 ]; then
-            jwt_part="${jwt_part}$(printf '=%.0s' $(seq 1 $pad))"
+            jwt_part="${jwt_part}$(repeat_string '=' $pad)"
         fi
         jwt_part=$(echo "$jwt_part" | tr '_-' '/+')
         echo "$jwt_part" | base64 -d 2>/dev/null

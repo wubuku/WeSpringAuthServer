@@ -51,13 +51,28 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# 字符串重复函数（兼容 macOS/Linux，避免 seq 命令依赖）
+repeat_string() {
+    local str="$1"
+    local count="$2"
+    local result=""
+    local i=0
+
+    while [ $i -lt $count ]; do
+        result="${result}${str}"
+        i=$((i + 1))
+    done
+
+    echo "$result"
+}
+
 # JWT 解码函数（兼容 macOS/Linux）
 if [[ "$OSTYPE" == "darwin"* ]]; then
     decode_jwt() {
         local jwt_part=$1
         local pad=$(( 4 - ${#jwt_part} % 4 ))
         if [ $pad -ne 4 ]; then
-            jwt_part="${jwt_part}$(printf '=%.0s' $(seq 1 $pad))"
+            jwt_part="${jwt_part}$(repeat_string '=' $pad)"
         fi
         jwt_part=$(echo "$jwt_part" | tr '_-' '/+')
         echo "$jwt_part" | gbase64 -d 2>/dev/null
@@ -67,7 +82,7 @@ else
         local jwt_part=$1
         local pad=$(( 4 - ${#jwt_part} % 4 ))
         if [ $pad -ne 4 ]; then
-            jwt_part="${jwt_part}$(printf '=%.0s' $(seq 1 $pad))"
+            jwt_part="${jwt_part}$(repeat_string '=' $pad)"
         fi
         jwt_part=$(echo "$jwt_part" | tr '_-' '/+')
         echo "$jwt_part" | base64 -d 2>/dev/null
@@ -83,8 +98,14 @@ get_user_token() {
     
     # 临时修改test.sh的用户配置
     cp test.sh test.sh.backup
-    sed -i '' "s/USERNAME=\".*\"/USERNAME=\"$username\"/" test.sh
-    sed -i '' "s/PASSWORD=\".*\"/PASSWORD=\"$password\"/" test.sh
+    # 兼容 macOS 和 Linux 的 sed 语法
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s/USERNAME=\".*\"/USERNAME=\"$username\"/" test.sh
+        sed -i '' "s/PASSWORD=\".*\"/PASSWORD=\"$password\"/" test.sh
+    else
+        sed -i "s/USERNAME=\".*\"/USERNAME=\"$username\"/" test.sh
+        sed -i "s/PASSWORD=\".*\"/PASSWORD=\"$password\"/" test.sh
+    fi
     
     # 运行 test.sh
     # 若启用 --refresh，则通过环境变量开启刷新测试；否则保持 test.sh 默认逻辑
