@@ -12,6 +12,7 @@ import org.dddml.ffvtraceability.auth.service.SmsVerificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -44,8 +45,11 @@ import java.util.Map;
 public class SmsLoginController {
 
     // Constants
-    private static final String DEFAULT_CLIENT_ID = "ffv-client";
     private static final String MSG_SMS_AUTH_FAILED = "SMS authentication failed: ";
+
+    // Configurable properties
+    @Value("${auth-server.default-client-id}")
+    private String defaultClientId;
 
     private static final Logger logger = LoggerFactory.getLogger(SmsLoginController.class);
 
@@ -141,13 +145,17 @@ public class SmsLoginController {
      * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @GetMapping("/auth")
-    public void smsAuth(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+    public void smsAuth(@RequestParam(value = "clientId", required = false) String clientId,
                         @RequestParam("mobileNumber") String mobileNumber,
                         @RequestParam("verificationCode") String verificationCode,
                         @RequestParam(value = "referrerId", required = false) String referrerId,
                         @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
                         HttpServletResponse response) throws IOException {
         try {
+            // 使用配置的默认客户端ID
+            if (clientId == null || clientId.trim().isEmpty()) {
+                clientId = defaultClientId;
+            }
             CustomUserDetails userDetails = smsVerificationService.processSmsLogin(mobileNumber, verificationCode, referrerId);
             Authentication authentication = oAuth2AuthenticationHelper.createAuthentication(userDetails);
             RegisteredClient registeredClient = oAuth2AuthenticationHelper.getRegisteredClient(clientId);
@@ -186,7 +194,7 @@ public class SmsLoginController {
      * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @GetMapping("/login")
-    public void smsLogin(@RequestParam(value = "clientId", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+    public void smsLogin(@RequestParam(value = "clientId", required = false) String clientId,
                          @RequestParam("mobileNumber") String mobileNumber,
                          @RequestParam("verificationCode") String verificationCode,
                          @RequestParam(value = "referrerId", required = false) String referrerId,
@@ -211,7 +219,7 @@ public class SmsLoginController {
     public ResponseEntity<Map<String, Object>> refreshToken(
             @RequestParam(value = "grant_type", required = false) String grantType,
             @RequestParam(value = "refresh_token", required = false) String refreshTokenFromParam,
-            @RequestParam(value = "client_id", defaultValue = DEFAULT_CLIENT_ID) String clientId,
+            @RequestParam(value = "client_id", required = false) String clientId,
             @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
             HttpServletRequest request,
             HttpServletResponse response) {
@@ -219,6 +227,10 @@ public class SmsLoginController {
         logger.info("🔄 处理refresh-token请求 - ClientId: {}, GrantType: {}", clientId, grantType);
 
         try {
+            // 使用配置的默认客户端ID
+            if (clientId == null || clientId.trim().isEmpty()) {
+                clientId = defaultClientId;
+            }
             // 🔒 安全升级：优先从Cookie读取refresh_token
             logger.debug("🍪 尝试从Cookie读取refresh_token...");
             String refreshTokenValue = cookieSecurityConfig.getRefreshTokenFromCookie(request);

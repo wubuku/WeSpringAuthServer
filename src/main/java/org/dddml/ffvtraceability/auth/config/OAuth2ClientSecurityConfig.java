@@ -9,17 +9,17 @@ import org.springframework.stereotype.Component;
 /**
  * OAuth2客户端安全配置
  * 实现client_secret的后端化管理
- * 
+ * <p>
  * 🏗️ 架构原则：
  * - 数据库作为唯一数据源（RegisteredClientRepository）
  * - 不在配置文件中重复配置客户端信息
  * - 直接从已有的OAuth2客户端注册表获取信息
- * 
+ * <p>
  * 解决安全问题：
  * 1. client_secret 从前端移除，完全后端管理
  * 2. 统一使用数据库配置，避免重复维护
  * 3. 保持OAuth2标准架构的完整性
- * 
+ *
  * @author WeSpringAuthServer
  * @since 1.0
  */
@@ -32,14 +32,14 @@ public class OAuth2ClientSecurityConfig {
      */
     @Component
     public static class OAuth2ClientCredentialsManager {
-        
+
         @Autowired
         private RegisteredClientRepository registeredClientRepository;
 
         /**
          * 获取客户端密钥
          * 直接从数据库中的RegisteredClient获取
-         * 
+         *
          * @param clientId 客户端ID
          * @return 客户端密钥，如果不存在返回null
          */
@@ -59,8 +59,8 @@ public class OAuth2ClientSecurityConfig {
         /**
          * 验证客户端凭证
          * 使用数据库中的RegisteredClient进行验证
-         * 
-         * @param clientId 客户端ID
+         *
+         * @param clientId     客户端ID
          * @param clientSecret 客户端密钥
          * @return 验证结果
          */
@@ -100,47 +100,5 @@ public class OAuth2ClientSecurityConfig {
             }
         }
 
-        /**
-         * 获取默认客户端凭证（ffv-client）
-         * 用于向后兼容
-         */
-        public ClientCredentials getDefaultClientCredentials() {
-            String defaultClientId = "ffv-client";
-            String clientSecret = getClientSecret(defaultClientId);
-            
-            if (clientSecret == null) {
-                // 如果ffv-client不存在，尝试获取第一个可用的客户端
-                // 这个方法在实际场景中应该很少使用
-                return new ClientCredentials(defaultClientId, "fallback-secret");
-            }
-            
-            return new ClientCredentials(defaultClientId, clientSecret);
-        }
-
-        /**
-         * 客户端凭证数据类
-         */
-        public static class ClientCredentials {
-            private final String clientId;
-            private final String clientSecret;
-
-            public ClientCredentials(String clientId, String clientSecret) {
-                this.clientId = clientId;
-                this.clientSecret = clientSecret;
-            }
-
-            public String getClientId() {
-                return clientId;
-            }
-
-            public String getClientSecret() {
-                return clientSecret;
-            }
-
-            @Override
-            public String toString() {
-                return String.format("ClientCredentials{clientId='%s', clientSecret='[HIDDEN]'}", clientId);
-            }
-        }
     }
 } 
