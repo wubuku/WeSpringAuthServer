@@ -217,6 +217,18 @@ SMS_TEST_LOGIN_CODE=246810
 
 启用后，特定手机号使用固定验证码即可登录，无需发送短信。切勿在生产环境长期开启。
 
+测试手机号使用固定验证码是否生效（返回 Access Token）：
+
+```bash
+export BASE_URL=https://al.u2511175.nyat.app:50518
+export SMS_TEST_LOGIN_PHONE_NUMBER=xxxxxxxxxxx
+export SMS_TEST_LOGIN_CODE=xxx
+curl -sS -G "$BASE_URL/sms/auth" \
+--data-urlencode "legacyMode=true" \
+--data-urlencode "mobileNumber=$SMS_TEST_LOGIN_PHONE_NUMBER" \
+--data-urlencode "verificationCode=$SMS_TEST_LOGIN_CODE"
+```
+
 ---
 
 ## 2. 端点说明
