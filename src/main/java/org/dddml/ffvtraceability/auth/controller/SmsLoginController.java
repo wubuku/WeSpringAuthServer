@@ -1,5 +1,6 @@
 package org.dddml.ffvtraceability.auth.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.dddml.ffvtraceability.auth.config.CookieSecurityConfig;
@@ -46,13 +47,11 @@ public class SmsLoginController {
 
     // Constants
     private static final String MSG_SMS_AUTH_FAILED = "SMS authentication failed: ";
-
+    private static final String CONTENT_TYPE_JSON = "application/json;charset=UTF-8";
+    private static final Logger logger = LoggerFactory.getLogger(SmsLoginController.class);
     // Configurable properties
     @Value("${auth-server.default-client-id}")
     private String defaultClientId;
-
-    private static final Logger logger = LoggerFactory.getLogger(SmsLoginController.class);
-
     @Autowired
     private SmsService smsService;
     @Autowired
@@ -141,7 +140,7 @@ public class SmsLoginController {
      * 无状态API，返回OAuth2 access_token和refresh_token
      * <p>
      * 🔒 安全升级：成功登录时设置HttpOnly Cookie存储refresh_token
-     * 
+     *
      * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @GetMapping("/auth")
@@ -152,6 +151,9 @@ public class SmsLoginController {
                         @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
                         HttpServletResponse response) throws IOException {
         try {
+            // 详细的输入验证，提供友好的错误提示
+            validateSmsLoginParameters(mobileNumber, verificationCode);
+
             // 使用配置的默认客户端ID
             if (clientId == null || clientId.trim().isEmpty()) {
                 clientId = defaultClientId;
@@ -170,7 +172,7 @@ public class SmsLoginController {
             // 兼容模式控制：legacyMode=true时在响应体中返回refresh_token（微信小程序），false时仅使用Cookie（Web）
             boolean cookieMode = !legacyMode; // legacyMode=true -> cookieMode=false (返回refresh_token)
             oAuth2AuthenticationHelper.writeTokenResponse(response, tokenPair, cookieMode);
-            
+
             if (legacyMode) {
                 logger.debug("SMS login using legacy mode - refresh_token included in response body for miniprogram compatibility");
             } else {
@@ -178,7 +180,15 @@ public class SmsLoginController {
             }
 
         } catch (AuthenticationException e) {
-            oAuth2AuthenticationHelper.handleAuthenticationError(response, e, MSG_SMS_AUTH_FAILED);
+            // 检查是否是验证码验证失败
+            if (e.getMessage() != null && e.getMessage().contains("Invalid verification code")) {
+                handleParameterValidationError(response, "验证码错误，请检查后重新输入");
+            } else {
+                oAuth2AuthenticationHelper.handleAuthenticationError(response, e, MSG_SMS_AUTH_FAILED);
+            }
+        } catch (IllegalArgumentException e) {
+            // 处理参数验证错误
+            handleParameterValidationError(response, e.getMessage());
         } catch (Exception e) {
             logger.error("Unexpected error during SMS authentication", e);
             oAuth2AuthenticationHelper.handleAuthenticationError(response, e, "Internal server error: ");
@@ -190,7 +200,7 @@ public class SmsLoginController {
      * 无状态API，返回OAuth2 access_token和refresh_token
      * <p>
      * 🔒 安全升级：成功登录时设置HttpOnly Cookie存储refresh_token
-     * 
+     *
      * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @GetMapping("/login")
@@ -200,8 +210,27 @@ public class SmsLoginController {
                          @RequestParam(value = "referrerId", required = false) String referrerId,
                          @RequestParam(value = "legacyMode", defaultValue = "false") boolean legacyMode,
                          HttpServletResponse response) throws IOException {
-        // 使用相同的逻辑，包括安全升级和兼容模式
-        smsAuth(clientId, mobileNumber, verificationCode, referrerId, legacyMode, response);
+        try {
+            // 详细的输入验证，提供友好的错误提示
+            validateSmsLoginParameters(mobileNumber, verificationCode);
+
+            // 使用相同的逻辑，包括安全升级和兼容模式
+            smsAuth(clientId, mobileNumber, verificationCode, referrerId, legacyMode, response);
+
+        } catch (AuthenticationException e) {
+            // 检查是否是验证码验证失败
+            if (e.getMessage() != null && e.getMessage().contains("Invalid verification code")) {
+                handleParameterValidationError(response, "验证码错误，请检查后重新输入");
+            } else {
+                oAuth2AuthenticationHelper.handleAuthenticationError(response, e, MSG_SMS_AUTH_FAILED);
+            }
+        } catch (IllegalArgumentException e) {
+            // 处理参数验证错误
+            handleParameterValidationError(response, e.getMessage());
+        } catch (Exception e) {
+            logger.error("Unexpected error during SMS login", e);
+            oAuth2AuthenticationHelper.handleAuthenticationError(response, e, "Internal server error: ");
+        }
     }
 
     /**
@@ -211,7 +240,7 @@ public class SmsLoginController {
      * - 从HttpOnly Cookie读取refresh_token，不再从请求参数获取
      * - 从后端配置获取client_secret，不再从前端传输
      * - 成功刷新后更新Cookie中的refresh_token
-     * 
+     *
      * @param legacyMode 兼容模式：true=在响应体中返回refresh_token（适用于微信小程序），false=仅使用Cookie（默认，适用于Web）
      */
     @PostMapping("/refresh-token")
@@ -291,5 +320,43 @@ public class SmsLoginController {
             errorResponse.put("error_description", "Internal server error");
             return ResponseEntity.status(500).body(errorResponse);
         }
+    }
+
+    /**
+     * 验证SMS登录参数，提供详细的错误信息
+     */
+    private void validateSmsLoginParameters(String mobileNumber, String verificationCode) {
+        if (mobileNumber == null || mobileNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("手机号不能为空");
+        }
+
+        // 验证手机号格式（中国大陆手机号）
+        if (!mobileNumber.matches("^1[3-9]\\d{9}$")) {
+            throw new IllegalArgumentException("手机号格式不正确，请输入11位中国大陆手机号");
+        }
+
+        if (verificationCode == null || verificationCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("验证码不能为空");
+        }
+
+        // 验证验证码格式（6位数字）
+        if (!verificationCode.matches("^\\d{4,6}$")) {
+            throw new IllegalArgumentException("验证码格式不正确，请输入4-6位数字验证码");
+        }
+    }
+
+    /**
+     * 处理参数验证错误，返回友好的错误响应
+     */
+    private void handleParameterValidationError(HttpServletResponse response, String errorMessage) throws IOException {
+        logger.warn("Parameter validation failed: {}", errorMessage);
+        response.setStatus(HttpServletResponse.SC_BAD_REQUEST); // 400 Bad Request
+
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("error", "invalid_request");
+        errorResponse.put("error_description", errorMessage);
+
+        response.setContentType(CONTENT_TYPE_JSON);
+        response.getWriter().write(new ObjectMapper().writeValueAsString(errorResponse));
     }
 }
