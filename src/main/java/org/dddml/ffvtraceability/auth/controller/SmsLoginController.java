@@ -69,6 +69,22 @@ public class SmsLoginController {
     public void onApplicationReady() {
         // 应用启动后立即打印配置值，用于调试配置是否正确加载
         logger.info("🔧 APPLICATION STARTUP: default-client-id configuration: {}", defaultClientId);
+
+        /*
+        // 注入ConfigurableEnvironment来获取更多调试信息
+        org.springframework.core.env.ConfigurableEnvironment env = org.springframework.beans.factory.BeanFactory.class.cast(this).getBean(org.springframework.core.env.ConfigurableEnvironment.class);
+
+        // 打印活跃的profiles
+        logger.info("🔧 DEBUG: Active profiles: {}", java.util.Arrays.toString(env.getActiveProfiles()));
+
+        // 打印包含此属性的所有PropertySource
+        logger.info("🔧 DEBUG: Property sources containing 'auth-server.default-client-id':");
+        for (org.springframework.core.env.PropertySource<?> ps : env.getPropertySources()) {
+            if (ps.containsProperty("auth-server.default-client-id")) {
+                logger.info("  - {}: {}", ps.getName(), ps.getProperty("auth-server.default-client-id"));
+            }
+        }
+        */
     }
 
     /**
