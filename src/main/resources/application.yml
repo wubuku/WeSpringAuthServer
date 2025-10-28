@@ -142,7 +142,7 @@ auth-server:
   # 授权服务器的issuer URL
   issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
   # 默认客户端ID，用于社交登录等场景
-  default-client-id: ${AUTH_SERVER_DEFAULT_CLIENT_ID:ffv-client}
+  default-client-id: ${AUTH_SERVER_DEFAULT_CLIENT_ID}
   
   # CORS跨域配置
   cors:

@@ -114,7 +114,10 @@ auth-server:
   web-clients:
     allowed-client-ids: ffv-client,other-web-client
     client-secrets: secret,other-secret
-  
+
+  # 默认客户端ID，用于社交登录等场景
+  default-client-id: ${AUTH_SERVER_DEFAULT_CLIENT_ID:ffv-client}
+
   # 开发工具配置
   dev-tools:
     enabled: true  # 启用开发工具API（密码编码等）
