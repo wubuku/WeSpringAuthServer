@@ -46,3 +46,5 @@ function handleSmsLoginError(statusCode, errorData) {
 - ✅ 现有成功登录流程保持不变
 - ✅ 渐进式升级，老版本仍可工作
 - ✅ 所有原有参数保持兼容
+
+---
