@@ -14,6 +14,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -63,6 +65,12 @@ public class SmsLoginController {
     @Autowired
     private OAuth2ClientSecurityConfig.OAuth2ClientCredentialsManager oAuth2ClientCredentialsManager;
 
+    @EventListener(ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        // 应用启动后立即打印配置值，用于调试配置是否正确加载
+        logger.info("🔧 APPLICATION STARTUP: default-client-id configuration: {}", defaultClientId);
+    }
+
     /**
      * 发送SMS验证码 - JSON格式 (新的微信小程序使用)
      * JSON格式: {"mobileNumber": "13800138000"}
@@ -70,6 +78,7 @@ public class SmsLoginController {
     @PostMapping(value = "/send-code", consumes = "application/json")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> sendSmsCodeJson(@RequestBody Map<String, String> request) {
+
         String mobileNumber = request.get("mobileNumber");
         if (mobileNumber == null && request.containsKey("phoneNumber")) {
             //兼容 `{"mobileNumber": "13800138000"}`
