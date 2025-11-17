@@ -105,7 +105,8 @@ auth-server:
       https://al.u2511175.nyat.app:50518,
       https://v0-beauty-consultant-ai-interface.vercel.app,
       https://kzmjq05ormpml1bob042.lite.vusercontent.net,
-      https://shimmer-shell-auth.lovable.app
+      https://shimmer-shell-auth.lovable.app,
+      https://3.u2511175.nyat.app:61595
     allowed-methods: GET,POST,PUT,DELETE,OPTIONS
     allowed-headers: Authorization,Content-Type,Accept,X-Requested-With,Origin,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-Dest
     allow-credentials: true
