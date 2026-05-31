@@ -138,3 +138,4 @@ test-*.txt
 csrf_token.txt
 test_phone.txt
 .env.prod
+.understand-anything/.understandignore
