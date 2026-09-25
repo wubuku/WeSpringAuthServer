@@ -12,7 +12,7 @@ spring:
 
   # 开发环境数据库配置
   datasource:
-    # url: jdbc:postgresql://127.0.0.1:5432/ruichuangqi_dev
+    url: jdbc:postgresql://127.0.0.1:5432/ruichuangqi_dev
     # 默认可以使用 DB_NAME 环境变量覆盖
     username: postgres
     password: 123456
@@ -28,11 +28,11 @@ spring:
     init:
       mode: always
       continue-on-error: true
-      schema-locations:
-        - classpath:schema.sql
-      data-locations:
-        - classpath:data-base.sql
-        - classpath:data-dev.sql
+#      schema-locations:
+#        - classpath:schema.sql
+#      data-locations:
+#        - classpath:data-base.sql
+#        - classpath:data-dev.sql
 
   # 开发环境JPA配置 - 启用SQL日志
   jpa:
@@ -101,6 +101,7 @@ auth-server:
       http://localhost:8080,
       http://localhost:3000,
       http://127.0.0.1:3000,
+      http://localhost:3001,
       http://localhost:1023,
       https://al.u2511175.nyat.app:50518,
       https://v0-beauty-consultant-ai-interface.vercel.app,
@@ -112,7 +113,7 @@ auth-server:
   
   # 项目特定的Web客户端配置
   web-clients:
-    allowed-client-ids: ffv-client,other-web-client
+    allowed-client-ids: ffv-client,other-web-client,partner-portal
     client-secrets: secret,other-secret
   
   # 开发工具配置

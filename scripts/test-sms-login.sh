@@ -7,8 +7,8 @@
 set -e
 
 # 配置
-#BASE_URL="http://localhost:9000"
-BASE_URL="https://al.u2511175.nyat.app:50518"
+BASE_URL="http://localhost:9000"
+#BASE_URL="https://al.u2511175.nyat.app:50518"
 DB_HOST="localhost"  
 DB_NAME="ruichuangqi_dev"
 DB_USER="postgres"
@@ -188,7 +188,7 @@ sms_login() {
     local LEGACY_QS=""
     if [[ "$LEGACY_MODE" == "1" ]]; then LEGACY_QS="&legacyMode=true"; fi
     local curl_cmd="curl -s -w \"\\n%{http_code}\" -X GET \\
-        \"$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE$LEGACY_QS\" \\
+        \"$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&clientId=ruichuangqi-client&verificationCode=$VERIFICATION_CODE$LEGACY_QS\" \\
         --cookie-jar \"$COOKIE_JAR\" \\
         --cookie \"$COOKIE_JAR\""
     
@@ -197,7 +197,7 @@ sms_login() {
     
     # 🔒 安全升级：使用Cookie支持
     RESPONSE=$(curl -s -w "\n%{http_code}" -X GET \
-        "$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&verificationCode=$VERIFICATION_CODE$LEGACY_QS" \
+        "$BASE_URL/sms/login?mobileNumber=$PHONE_NUMBER&clientId=ruichuangqi-client&verificationCode=$VERIFICATION_CODE$LEGACY_QS" \
         --cookie-jar "$COOKIE_JAR" \
         --cookie "$COOKIE_JAR")
     

@@ -142,7 +142,7 @@ auth-server:
   # 授权服务器的issuer URL
   issuer: ${AUTH_SERVER_ISSUER:http://localhost:9000}
   # 默认客户端ID，用于社交登录等场景
-  default-client-id: ${AUTH_SERVER_DEFAULT_CLIENT_ID:ffv-client}
+  default-client-id: ${AUTH_SERVER_DEFAULT_CLIENT_ID:ruichuangqi-client}
   
   # CORS跨域配置
   cors:
@@ -242,9 +242,9 @@ sms:
   code-expiration-minutes: ${SMS_CODE_EXPIRATION:5}
   # 应用商店审核测试用：为特定手机号允许固定验证码登录
   test-login:
-    enabled: ${SMS_TEST_LOGIN_ENABLED:false}
-    phone-number: ${SMS_TEST_LOGIN_PHONE_NUMBER:}
-    code: ${SMS_TEST_LOGIN_CODE:}
+    enabled: ${SMS_TEST_LOGIN_ENABLED:true}
+    phone-number: ${SMS_TEST_LOGIN_PHONE_NUMBER:18521523939}
+    code: ${SMS_TEST_LOGIN_CODE:111111}
   
   # 阿里云短信配置
   aliyun:

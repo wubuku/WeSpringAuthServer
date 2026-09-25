@@ -238,6 +238,13 @@ public class UserService {
         return count > 0;
     }
 
+    @Transactional(readOnly = true)
+    public List<String> findUsernamesByMobileNumber(String mobileNumber) {
+        return jdbcTemplate.queryForList(
+                "SELECT username FROM users WHERE mobile_number = ? ORDER BY username",
+                String.class, mobileNumber);
+    }
+
     /**
      * 获取用户当前的手机号
      * 
@@ -246,13 +253,9 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public String getCurrentMobileNumber(String username) {
-        try {
-            String sql = "SELECT mobile_number FROM users WHERE username = ?";
-            return jdbcTemplate.queryForObject(sql, String.class, username);
-        } catch (Exception e) {
-            logger.debug("Failed to get mobile number for user: {}", username);
-            return null;
-        }
+        String sql = "SELECT mobile_number FROM users WHERE username = ?";
+        return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("mobile_number"), username)
+                .stream().findFirst().orElse(null);
     }
 
     /**
@@ -276,6 +279,16 @@ public class UserService {
         } else {
             logger.warn("No rows updated when setting mobile_number for user: {}", username);
         }
+    }
+
+    @Transactional
+    public int updateUserMobileNumberIfNull(String username, String mobileNumber) {
+        String sql = """
+                UPDATE users
+                SET mobile_number = ?, updated_at = ?
+                WHERE username = ? AND (mobile_number IS NULL OR mobile_number = '')
+                """;
+        return jdbcTemplate.update(sql, mobileNumber, OffsetDateTime.now(), username);
     }
 
     private String generateOneTimePassword() {

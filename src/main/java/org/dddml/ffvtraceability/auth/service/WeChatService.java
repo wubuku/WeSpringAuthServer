@@ -12,11 +12,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.OffsetDateTime;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -43,10 +51,142 @@ public class WeChatService {
     private final UserService userService;
     private final UserIdentificationService userIdentificationService;
 
+    @Autowired
+    @Lazy
+    private WeChatService transactionalProxy;
+
     public WeChatService(WxMaService wxMaService, UserService userService, UserIdentificationService userIdentificationService) {
         this.wxMaService = wxMaService;
         this.userService = userService;
         this.userIdentificationService = userIdentificationService;
+    }
+
+    /**
+     * 强制手机号入口的非事务编排器。微信换码在事务外完成，数据库写入由代理方法独立提交。
+     */
+    public CustomUserDetails processWeChatLoginWithRequiredPhone(String loginCode, String mobileCode) {
+        if (loginCode == null || loginCode.trim().isEmpty()) {
+            throw new AuthenticationException("WeChat login code is empty");
+        }
+        if (mobileCode == null || mobileCode.trim().isEmpty()) {
+            throw new AuthenticationException("WeChat mobile code is empty");
+        }
+        WxMaJscode2SessionResult sessionResult = getWeChatSessionInfo(loginCode);
+        String mobileNumber = getMobileNumber(mobileCode);
+        if (mobileNumber == null || mobileNumber.trim().isEmpty()) {
+            throw new AuthenticationException("WeChat mobile number is empty");
+        }
+        String openId = validateAndExtractOpenId(sessionResult);
+        String unionId = sessionResult.getUnionid();
+        logger.debug("Processing required-phone WeChat login: OpenID={}, UnionID={}, mobileNumber={}",
+                openId, unionId, mobileNumber);
+        try {
+            return transactionalProxy.persistRequiredPhoneLogin(sessionResult, openId, unionId, mobileNumber);
+        } catch (DataIntegrityViolationException e) {
+            if (!isUniqueConstraintViolation(e)) {
+                throw e;
+            }
+            return transactionalProxy.rereadRequiredPhoneLogin(sessionResult, openId, unionId, mobileNumber);
+        }
+    }
+
+    @Transactional
+    public CustomUserDetails persistRequiredPhoneLogin(WxMaJscode2SessionResult sessionResult,
+                                                       String openId, String unionId, String mobileNumber) {
+        return persistRequiredPhoneLoginInTransaction(openId, unionId, mobileNumber);
+    }
+
+    @Transactional
+    public CustomUserDetails rereadRequiredPhoneLogin(WxMaJscode2SessionResult sessionResult,
+                                                      String openId, String unionId, String mobileNumber) {
+        return persistRequiredPhoneLoginInTransaction(openId, unionId, mobileNumber);
+    }
+
+    private CustomUserDetails persistRequiredPhoneLoginInTransaction(String openId, String unionId,
+                                                                      String mobileNumber) {
+        OffsetDateTime now = OffsetDateTime.now();
+        Set<String> owners = new LinkedHashSet<>();
+        owners.addAll(userIdentificationService.findUsernamesByIdentifier(WECHAT_OPENID_TYPE, openId));
+        if (unionId != null && !unionId.isBlank()) {
+            owners.addAll(userIdentificationService.findUsernamesByIdentifier(WECHAT_UNIONID_TYPE, unionId));
+        }
+        owners.addAll(userIdentificationService.findUsernamesByIdentifier(WECHAT_MOBILE_TYPE, mobileNumber));
+        owners.addAll(userIdentificationService.findUsernamesByIdentifier("MOBILE_NUMBER", mobileNumber));
+        owners.addAll(userService.findUsernamesByMobileNumber(mobileNumber));
+        if (owners.size() > 1) {
+            logger.warn("Required-phone identity owner conflict: mobileNumber={}, owners={}", mobileNumber, owners);
+            throw new AuthenticationException("WeChat identity owner conflict");
+        }
+
+        String username = owners.stream().findFirst().orElse(null);
+        if (username == null) {
+            username = generateReadableUsername(mobileNumber);
+            UserDto userDto = new UserDto();
+            userDto.setUsername(username);
+            userDto.setMobileNumber(null);
+            userDto.setEnabled(true);
+            userService.createUser(userDto, UUID.randomUUID().toString(), null);
+        }
+        logger.info("Required-phone WeChat identity owner resolved: mobileNumber={}, username={}", mobileNumber, username);
+
+        validateExistingIdentity(username, WECHAT_OPENID_TYPE, openId);
+        if (unionId != null && !unionId.isBlank()) {
+            validateExistingIdentity(username, WECHAT_UNIONID_TYPE, unionId);
+        }
+        validateExistingIdentity(username, WECHAT_MOBILE_TYPE, mobileNumber);
+        validateExistingIdentity(username, "MOBILE_NUMBER", mobileNumber);
+        String currentMobile = userService.getCurrentMobileNumber(username);
+        if (currentMobile != null && !currentMobile.isBlank() && !mobileNumber.equals(currentMobile)) {
+            throw new AuthenticationException("Existing account mobile number conflict");
+        }
+
+        userIdentificationService.addUserIdentificationInsertOnly(username, WECHAT_OPENID_TYPE, openId, true, now);
+        if (unionId != null && !unionId.isBlank()) {
+            userIdentificationService.addUserIdentificationInsertOnly(username, WECHAT_UNIONID_TYPE, unionId, true, now);
+        }
+        userIdentificationService.addUserIdentificationInsertOnly(username, WECHAT_MOBILE_TYPE, mobileNumber, true, now);
+        userService.updateUserMobileNumberIfNull(username, mobileNumber);
+        verifySingleOwner(username, WECHAT_OPENID_TYPE, openId);
+        if (unionId != null && !unionId.isBlank()) {
+            verifySingleOwner(username, WECHAT_UNIONID_TYPE, unionId);
+        }
+        verifySingleOwner(username, WECHAT_MOBILE_TYPE, mobileNumber);
+        UserDto user = userService.getUserByUsername(username);
+        if (user == null || !mobileNumber.equals(user.getMobileNumber())) {
+            logger.error("Required-phone mobile persistence verification failed: mobileNumber={}, username={}",
+                    mobileNumber, username);
+            throw new AuthenticationException("WeChat mobile number persistence verification failed");
+        }
+        logger.info("Required-phone WeChat login persistence succeeded: mobileNumber={}, username={}",
+                mobileNumber, username);
+        return userService.getUserDetails(username);
+    }
+
+    private void verifySingleOwner(String expectedUsername, String type, String identifier) {
+        List<String> owners = userIdentificationService.findUsernamesByIdentifier(type, identifier);
+        if (owners.size() != 1 || !expectedUsername.equals(owners.get(0))) {
+            throw new AuthenticationException("WeChat identity owner changed during persistence");
+        }
+    }
+
+    private void validateExistingIdentity(String username, String type, String identifier) {
+        userIdentificationService.getUserIdentifications(username).stream()
+                .filter(id -> type.equals(id.getUserIdentificationTypeId()))
+                .filter(id -> !identifier.equals(id.getIdentifier()))
+                .findAny()
+                .ifPresent(id -> { throw new AuthenticationException("Existing WeChat identity conflict"); });
+    }
+
+    private boolean isUniqueConstraintViolation(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof SQLException sqlException
+                    && "23505".equals(sqlException.getSQLState())) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     /**
@@ -389,4 +529,4 @@ public class WeChatService {
         }
     }
 
-} 
+}

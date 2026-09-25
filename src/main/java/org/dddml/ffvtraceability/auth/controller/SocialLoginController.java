@@ -119,6 +119,36 @@ public class SocialLoginController {
         }
     }
 
+    @PostMapping("/wechat/login-with-phone")
+    @ResponseBody
+    public void wechatLoginWithPhone(@RequestBody RequiredPhoneLoginRequest request,
+                                     HttpServletResponse response) throws IOException {
+        try {
+            if (request == null || request.loginCode() == null || request.loginCode().isBlank()
+                    || request.mobileCode() == null || request.mobileCode().isBlank()) {
+                throw new AuthenticationException("WeChat loginCode and mobileCode are required");
+            }
+            String clientId = request.clientId();
+            if (clientId == null || clientId.isBlank()) {
+                clientId = defaultClientId;
+            }
+            CustomUserDetails userDetails = weChatService.processWeChatLoginWithRequiredPhone(
+                    request.loginCode(), request.mobileCode());
+            Authentication authentication = createAuthentication(userDetails);
+            RegisteredClient registeredClient = oAuth2AuthenticationHelper.getRegisteredClient(clientId);
+            OAuth2AuthenticationHelper.TokenPair tokenPair =
+                    oAuth2AuthenticationHelper.generateTokenPair(registeredClient, authentication);
+            oAuth2AuthenticationHelper.createAndSaveAuthorization(registeredClient, userDetails, tokenPair, authentication);
+            cookieSecurityConfig.setRefreshTokenCookie(response, tokenPair.getRefreshToken().getTokenValue());
+            oAuth2AuthenticationHelper.writeTokenResponse(response, tokenPair, !request.legacyModeEnabled());
+        } catch (AuthenticationException e) {
+            oAuth2AuthenticationHelper.handleAuthenticationError(response, e, MSG_WECHAT_AUTH_FAILED);
+        } catch (Exception e) {
+            logger.error("Unexpected error during required-phone WeChat authentication", e);
+            oAuth2AuthenticationHelper.handleAuthenticationError(response, e, "Internal server error: ");
+        }
+    }
+
     /**
      * 刷新Token端点 - 统一的OAuth2 refresh token处理
      * 
@@ -203,5 +233,12 @@ public class SocialLoginController {
         // 修复说明：使用AuthenticationUtils确保groups信息正确设置到Authentication details中
         return org.dddml.ffvtraceability.auth.authentication.AuthenticationUtils
                 .createAuthenticatedToken(userDetails, userDetails);
+    }
+
+    public record RequiredPhoneLoginRequest(String loginCode, String mobileCode,
+                                            Boolean legacyMode, String clientId) {
+        public boolean legacyModeEnabled() {
+            return Boolean.TRUE.equals(legacyMode);
+        }
     }
 }

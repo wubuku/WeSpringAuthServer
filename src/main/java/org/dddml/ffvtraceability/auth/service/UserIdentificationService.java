@@ -36,6 +36,16 @@ public class UserIdentificationService {
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
+    @Transactional(readOnly = true)
+    public List<String> findUsernamesByIdentifier(String identificationType, String identifier) {
+        String sql = """
+                SELECT username FROM user_identifications
+                WHERE user_identification_type_id = ? AND identifier = ?
+                ORDER BY username
+                """;
+        return jdbcTemplate.queryForList(sql, String.class, identificationType, identifier);
+    }
+
     /**
      * Get all identifications for a user
      *
@@ -80,6 +90,23 @@ public class UserIdentificationService {
                 identifier, verified, verified ? now : null, now);
     }
 
+    @Transactional
+    public void addUserIdentificationInsertOnly(String username, String identificationType,
+                                                 String identifier, boolean verified, OffsetDateTime now) {
+        if (now == null) {
+            now = OffsetDateTime.now();
+        }
+        String sql = """
+                INSERT INTO user_identifications
+                (user_identification_type_id, username, identifier, verified,
+                 verified_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (user_identification_type_id, username) DO NOTHING
+                """;
+        jdbcTemplate.update(sql, identificationType, username, identifier, verified,
+                verified ? now : null, now, now);
+    }
+
     /**
      * Mark an identification as verified
      *
@@ -111,4 +138,4 @@ public class UserIdentificationService {
                 """;
         jdbcTemplate.update(sql, username, identificationType);
     }
-} 
+}
