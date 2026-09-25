@@ -538,7 +538,7 @@ public class OAuth2AuthenticationHelper {
     private ResponseEntity<Map<String, Object>> createTokenResponse(OAuth2AccessToken accessToken,
                                                                     OAuth2RefreshToken refreshToken) {
         Map<String, Object> tokenResponse = createTokenResponseBody(accessToken, refreshToken);
-        logger.debug("Created token response with access token: {}...", accessToken.getTokenValue().substring(0, Math.min(accessToken.getTokenValue().length(), 20)));
+        logger.debug("Created token response with access token");
         return ResponseEntity.ok(tokenResponse);
     }
 

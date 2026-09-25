@@ -289,20 +289,18 @@ public class SmsLoginController {
             logger.debug("🍪 尝试从Cookie读取refresh_token...");
             String refreshTokenValue = cookieSecurityConfig.getRefreshTokenFromCookie(request);
 
-            logger.info("🍪 Cookie中的refresh_token: {}",
-                    refreshTokenValue != null ? (refreshTokenValue.substring(0, Math.min(20, refreshTokenValue.length())) + "...") : "null");
+            logger.info("🍪 Cookie中的refresh_token: {}", refreshTokenValue != null ? "present" : "missing");
 
             if (refreshTokenValue == null && refreshTokenFromParam != null) {
                 // 向后兼容：如果Cookie中没有，尝试从参数获取
                 refreshTokenValue = refreshTokenFromParam;
-                logger.warn("⚠️  使用参数中的refresh_token作为后备方案: {}...",
-                        refreshTokenFromParam.substring(0, Math.min(20, refreshTokenFromParam.length())));
+                logger.warn("⚠️  使用参数中的refresh_token作为后备方案");
                 logger.warn("Consider upgrading client to use Cookie-based authentication.");
             }
 
             if (refreshTokenValue == null) {
-                logger.error("❌ 无法获取refresh_token - Cookie: null, Parameter: {}",
-                        refreshTokenFromParam != null ? (refreshTokenFromParam.substring(0, Math.min(10, refreshTokenFromParam.length())) + "...") : "null");
+                logger.error("❌ 无法获取refresh_token - Cookie: missing, Parameter: {}",
+                        refreshTokenFromParam != null ? "present" : "missing");
             }
 
             // 🔒 安全升级：从后端配置获取client_secret
@@ -327,8 +325,7 @@ public class SmsLoginController {
                 String newRefreshToken = result.getHeaders().getFirst("X-New-Refresh-Token");
                 if (newRefreshToken != null) {
                     cookieSecurityConfig.setRefreshTokenCookie(response, newRefreshToken);
-                    logger.info("✅ Updated HttpOnly Cookie with new refresh_token: {}...",
-                            newRefreshToken.substring(0, Math.min(20, newRefreshToken.length())));
+                    logger.info("✅ Updated HttpOnly Cookie with new refresh_token");
                 } else {
                     logger.warn("⚠️  No new refresh_token found in response header for Cookie update");
                 }

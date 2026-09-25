@@ -87,7 +87,7 @@ public class CookieSecurityConfig {
             
             response.addHeader("Set-Cookie", cookie.toString());
             
-            logger.debug("🍪 Cookie已设置: {}", cookie.toString());
+            logger.debug("🍪 Cookie已设置: name=refresh_token, secure={}, sameSite={}", secure, sameSite);
         }
         
         /**
@@ -100,15 +100,13 @@ public class CookieSecurityConfig {
                 logger.debug("🍪 找到 {} 个Cookie", request.getCookies().length);
                 
                 for (Cookie cookie : request.getCookies()) {
-                    logger.debug("🍪 检查Cookie: {} = {} (domain: {}, path: {})", 
+                    logger.debug("🍪 检查Cookie: {} (domain: {}, path: {})",
                                cookie.getName(), 
-                               cookie.getValue().substring(0, Math.min(20, cookie.getValue().length())) + "...",
                                cookie.getDomain(), 
                                cookie.getPath());
                     
                     if ("refresh_token".equals(cookie.getName())) {
-                        logger.debug("🍪 ✅ 找到refresh_token Cookie: {}...", 
-                                   cookie.getValue().substring(0, Math.min(20, cookie.getValue().length())));
+                        logger.debug("🍪 ✅ 找到refresh_token Cookie");
                         return cookie.getValue();
                     }
                 }
