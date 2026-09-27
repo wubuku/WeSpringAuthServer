@@ -254,8 +254,9 @@ public class UserService {
     @Transactional(readOnly = true)
     public String getCurrentMobileNumber(String username) {
         String sql = "SELECT mobile_number FROM users WHERE username = ?";
-        return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("mobile_number"), username)
-                .stream().findFirst().orElse(null);
+        List<String> mobileNumbers = jdbcTemplate.query(
+                sql, (rs, rowNum) -> rs.getString("mobile_number"), username);
+        return mobileNumbers.isEmpty() ? null : mobileNumbers.get(0);
     }
 
     /**
