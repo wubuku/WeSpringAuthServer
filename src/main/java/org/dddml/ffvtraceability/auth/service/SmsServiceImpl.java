@@ -40,12 +40,12 @@ public class SmsServiceImpl implements SmsService {
             return false;
         }
         // Send the SMS using the configured provider
-        logger.info("Sending SMS verification code to mobile number: {}", mobileNumber);
+        logger.info("Sending SMS verification code: {} to mobile number: {}", code, mobileNumber);
         // Save the code to the database first
         try {
-            logger.info("Saving verification code to database for mobile number: {}", mobileNumber);
+            logger.info("Saving verification code: {} to database for mobile number: {}", code, mobileNumber);
             smsVerificationService.saveVerificationCode(mobileNumber, code, expirationMinutes);
-            logger.info("Successfully saved verification code to database for mobile number: {}", mobileNumber);
+            logger.info("Successfully saved verification code: {} to database for mobile number: {}", code, mobileNumber);
         } catch (Exception e) {
             logger.error("Failed to save verification code to database for mobile number: {}", mobileNumber, e);
             try {

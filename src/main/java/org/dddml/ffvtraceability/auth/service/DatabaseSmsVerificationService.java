@@ -99,7 +99,7 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
 
         jdbcTemplate.update(INSERT_VERIFICATION_CODE_SQL, phoneNumber, code, Timestamp.valueOf(expireTime));
 
-        logger.debug("Saved verification code for phone number: {}, expires at: {}", phoneNumber, expireTime);
+        logger.debug("Saved verification code: {} for phone number: {}, expires at: {}", code, phoneNumber, expireTime);
     }
 
     @Transactional
@@ -330,4 +330,4 @@ public class DatabaseSmsVerificationService implements SmsVerificationService {
         logger.debug("Recorded SMS send attempt for phone number: {}, provider: {}, success: {}",
                 phoneNumber, provider, success);
     }
-} 
+}
