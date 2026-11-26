@@ -1,14 +1,112 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # ============================================================================
 # 🧪 OAuth2 标准授权码流程测试脚本
 # ============================================================================
-# 此脚本测试标准OAuth2授权码流程，包括：
-# - 用户登录和授权
-# - 授权码交换access_token 
-# - 刷新token功能测试（可选）
-# - JWT令牌解析和验证
+# 此脚本测试标准 OAuth2 授权码流程，包括：
+# - 用户登录和授权（支持强制改密重定向与用户同意页）
+# - 授权码交换 access_token
+# - 刷新 token 功能测试（可选：TEST_REFRESH_TOKEN=true）
+# - JWT 令牌解析和验证
 # ============================================================================
+
+set -euo pipefail
+
+# 依赖检查
+for cmd in curl jq openssl base64; do
+    command -v "$cmd" >/dev/null 2>&1 || {
+        echo "❌ Error: 缺少依赖命令: $cmd" >&2
+        exit 1
+    }
+done
+
+# 临时工作目录（存放 cookies 与 HTTP 响应头，退出自动清理，避免污染当前目录）
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+COOKIE_JAR="$WORK_DIR/cookies.txt"
+HEADER_FILE="$WORK_DIR/headers.txt"
+BODY_FILE="$WORK_DIR/body.txt"
+
+# 产物输出目录（默认当前目录以兼容直接运行；批量脚本可传独立目录隔离并发）
+OUTPUT_DIR="${TEST_OUTPUT_DIR:-.}"
+mkdir -p "$OUTPUT_DIR"
+
+# 统一 curl 封装：本地回环绕过代理 + 设置超时，避免本机代理拦截或无限卡死
+curl_local() {
+    curl --noproxy 'localhost,127.0.0.1,[::1]' \
+        --connect-timeout 5 \
+        --max-time 20 \
+        "$@"
+}
+
+# 大小写无关提取 HTTP 响应头（兼容 HTTP/1.1 与 HTTP/2，兼容 macOS BSD awk 与 GNU awk）
+extract_header() {
+    local file="$1"
+    local target="$2"
+    awk -v key="$(printf '%s' "$target" | tr '[:upper:]' '[:lower:]')" '
+        {
+            sub(/\r$/, "")
+            idx = index($0, ":")
+            if (idx > 0) {
+                name = tolower(substr($0, 1, idx - 1))
+                if (name == key) {
+                    val = substr($0, idx + 1)
+                    sub(/^[[:space:]]+/, "", val)
+                    res = val
+                }
+            }
+        }
+        END { if (res != "") print res }
+    ' "$file"
+}
+
+# 从 Set-Cookie 响应头提取 JSESSIONID
+extract_jsessionid() {
+    local file="$1"
+    awk '
+        {
+            sub(/\r$/, "")
+            idx = index($0, ":")
+            if (idx > 0 && tolower(substr($0, 1, idx - 1)) == "set-cookie") {
+                val = substr($0, idx + 1)
+                if (match(val, /JSESSIONID=[^;[:space:]]+/)) {
+                    res = substr(val, RSTART + 11, RLENGTH - 11)
+                }
+            }
+        }
+        END { if (res != "") print res }
+    ' "$file"
+}
+
+# 跨平台 Base64 解码（兼容 macOS BSD base64 与 GNU base64，不强依赖 gbase64）
+base64_decode() {
+    if printf 'QQ==' | base64 -d >/dev/null 2>&1; then
+        base64 -d
+    elif printf 'QQ==' | base64 -D >/dev/null 2>&1; then
+        base64 -D
+    elif command -v gbase64 >/dev/null 2>&1; then
+        gbase64 -d
+    else
+        echo "❌ Error: 无法找到可用的 base64 解码命令" >&2
+        return 1
+    fi
+}
+
+# 原子写入 tokens.env 并收紧权限
+write_tokens_env() {
+    local access="$1"
+    local refresh="$2"
+    local id="$3"
+    local tmp_file="$WORK_DIR/tokens.env.tmp"
+    {
+        printf 'export ACCESS_TOKEN=%q\n' "$access"
+        printf 'export REFRESH_TOKEN=%q\n' "$refresh"
+        printf 'export ID_TOKEN=%q\n' "$id"
+    } > "$tmp_file"
+    chmod 600 "$tmp_file"
+    mv "$tmp_file" "$OUTPUT_DIR/tokens.env"
+}
 
 # 🚨 测试用客户端凭据 - 仅用于开发测试！绝不能暴露到浏览器端！
 # ⚠️  生产环境必须使用安全的客户端凭据管理方式
@@ -45,302 +143,255 @@ USERNAME="${TEST_USERNAME:-store_admin}" # admin / user
 PASSWORD="${TEST_PASSWORD:-store123}"
 NEW_PASSWORD="${TEST_NEW_PASSWORD:-$PASSWORD}"  # 当需要修改密码时使用的新密码
 
-# Base64URL encode function (no padding)
+# Base64URL 编码（无 padding）
 base64url_encode() {
-    # Read binary input and encode to base64, then transform to base64url
-    base64 | tr '/+' '_-' | tr -d '='
+    base64 | tr -d '\n' | tr '/+' '_-' | tr -d '='
 }
 
-# 字符串重复函数（兼容 macOS/Linux，避免 seq 命令依赖）
-repeat_string() {
-    local str="$1"
-    local count="$2"
-    local result=""
-    local i=0
-
-    while [ $i -lt $count ]; do
-        result="${result}${str}"
-        i=$((i + 1))
-    done
-
-    echo "$result"
-}
-
-# URL encode function
+# URL 编码（复用已依赖的 jq，避免额外依赖 python3）
 urlencode() {
-    python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
+    jq -rn --arg v "$1" '$v | @uri'
 }
 
-# Generate code_verifier (random string)
-code_verifier=$(openssl rand -base64 32 | tr -d /=+ | cut -c -43)
+# JWT 解码（兼容 macOS/Linux）
+decode_jwt() {
+    local jwt_part="$1"
+    local rem=$(( ${#jwt_part} % 4 ))
+    if [ "$rem" -eq 2 ]; then
+        jwt_part="${jwt_part}=="
+    elif [ "$rem" -eq 3 ]; then
+        jwt_part="${jwt_part}="
+    fi
+    printf '%s' "$jwt_part" | tr '_-' '/+' | base64_decode 2>/dev/null
+}
+
+# 去除 GNU base64 可能产生的换行符
+CLIENT_CREDENTIALS_B64="$(printf '%s' "$CLIENT_CREDENTIALS_B64" | tr -d '\n')"
+
+# 清理目标目录下可能残留的旧 tokens.env，避免失败后被上层误读旧值
+rm -f "$OUTPUT_DIR/tokens.env"
+
+# 生成 PKCE code_verifier 与 code_challenge
+code_verifier="$(openssl rand -base64 32 | tr -d '/=+\n' | cut -c -43)"
 echo "🔑 Code Verifier: $code_verifier"
 
-# Generate code_challenge (base64url-encode(sha256(code_verifier)))
-code_challenge=$(printf "%s" "$code_verifier" | openssl sha256 -binary | base64url_encode)
+code_challenge="$(printf '%s' "$code_verifier" | openssl sha256 -binary | base64url_encode)"
 echo "🔒 Code Challenge: $code_challenge"
 
-# Verify the code_challenge is not empty
 if [ -z "$code_challenge" ]; then
-    echo "❌ Error: Failed to generate code_challenge"
+    echo "❌ Error: Failed to generate code_challenge" >&2
     exit 1
 fi
 
-# 清理旧的 cookies
-rm -f cookies.txt
-
 # 获取登录页面和 CSRF token
-login_page=$(curl -c cookies.txt -b cookies.txt -s -H "Accept: text/html" ${BASE_URL}/login)
-csrf_token=$(echo "$login_page" | grep -o 'name="_csrf".*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | tr -d '\n')
+login_page="$(curl_local -sS -c "$COOKIE_JAR" -b "$COOKIE_JAR" -H "Accept: text/html" "${BASE_URL}/login")"
+csrf_token="$(printf '%s' "$login_page" | grep -o 'name="_csrf"[^>]*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | head -n 1 || true)"
 
 echo "🔐 CSRF Token: $csrf_token"
 
-# 验证是否成功获取到 CSRF token
 if [ -z "$csrf_token" ]; then
-    echo "❌ Error: Failed to get CSRF token"
-    echo "Login page response:"
-    echo "$login_page"
+    echo "❌ Error: Failed to get CSRF token from ${BASE_URL}/login" >&2
+    printf '%s\n' "$login_page" | head -n 20 >&2
     exit 1
 fi
 
-# 直接使用原始 CSRF token，不进行 URL 编码
-#encoded_csrf_token=$(urlencode "$csrf_token")
-#echo "📝 Encoded CSRF Token: $encoded_csrf_token"
-
-# 执行登录并捕获完整响应
-login_response=$(curl -X POST ${BASE_URL}/login \
-    -c cookies.txt -b cookies.txt \
+# 执行登录并分离响应头与响应体（--data-urlencode 避免密码含特殊字符时被拆参）
+curl_local -sS -X POST "${BASE_URL}/login" \
+    -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
     -H "Accept: text/html,application/xhtml+xml" \
     -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "username=$USERNAME" \
-    -d "password=$PASSWORD" \
-    -d "_csrf=$csrf_token" \
-    -v 2>&1)
+    --data-urlencode "username=$USERNAME" \
+    --data-urlencode "password=$PASSWORD" \
+    --data-urlencode "_csrf=$csrf_token" \
+    -D "$HEADER_FILE" -o "$BODY_FILE"
+
+location="$(extract_header "$HEADER_FILE" "location")"
+cookie_session_id="$(extract_jsessionid "$HEADER_FILE")"
+header_session_id="$(extract_header "$HEADER_FILE" "x-auth-token")"
 
 # 检查是否重定向到密码修改页面
-if echo "$login_response" | grep -q "/password/change"; then
+if [[ "$location" == *"/password/change"* ]]; then
     echo "🔄 Redirected to password change page"
-    
-    # 获取密码修改页面和新的 CSRF token
-    change_password_page=$(curl -s \
-        -c cookies.txt -b cookies.txt \
+
+    extra_auth_args=()
+    if [ -n "$header_session_id" ]; then
+        extra_auth_args=(-H "X-Auth-Token: $header_session_id")
+    fi
+
+    change_password_page="$(curl_local -sS \
+        -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
         -H "Accept: text/html" \
-        ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
-        ${BASE_URL}/password/change)
-    
-    new_csrf_token=$(echo "$change_password_page" | grep -o 'name="_csrf".*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | tr -d '\n')
-    state_token=$(echo "$change_password_page" | grep -o 'name="state".*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | tr -d '\n')
-    
+        ${extra_auth_args[@]+"${extra_auth_args[@]}"} \
+        "${BASE_URL}/password/change")"
+
+    new_csrf_token="$(printf '%s' "$change_password_page" | grep -o 'name="_csrf"[^>]*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | head -n 1 || true)"
+    state_token="$(printf '%s' "$change_password_page" | grep -o 'name="state"[^>]*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | head -n 1 || true)"
+
     echo "🔐 New CSRF Token: $new_csrf_token"
     echo "🔐 State Token: $state_token"
-    
-    # 提交密码修改
-    change_password_response=$(curl -s -X POST ${BASE_URL}/password/change \
-        -c cookies.txt -b cookies.txt \
-        ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
+
+    curl_local -sS -X POST "${BASE_URL}/password/change" \
+        -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+        ${extra_auth_args[@]+"${extra_auth_args[@]}"} \
         -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "_csrf=$new_csrf_token" \
-        -d "state=$state_token" \
-        -d "currentPassword=$PASSWORD" \
-        -d "newPassword=$NEW_PASSWORD" \
-        -d "confirmPassword=$NEW_PASSWORD" \
-        -D - 2>/dev/null)
-    
-    # 检查密码修改是否成功
-    if echo "$change_password_response" | grep -q "error"; then
-        echo "❌ Password change failed!"
-        echo "$change_password_response"
+        --data-urlencode "_csrf=$new_csrf_token" \
+        --data-urlencode "state=$state_token" \
+        --data-urlencode "currentPassword=$PASSWORD" \
+        --data-urlencode "newPassword=$NEW_PASSWORD" \
+        --data-urlencode "confirmPassword=$NEW_PASSWORD" \
+        -D "$HEADER_FILE" -o "$BODY_FILE"
+
+    change_loc="$(extract_header "$HEADER_FILE" "location")"
+    if [[ "$change_loc" == *"error"* ]] || grep -qi "error" "$BODY_FILE"; then
+        echo "❌ Password change failed!" >&2
+        cat "$HEADER_FILE" >&2
         exit 1
     fi
-    
+
     echo "✅ Password changed successfully"
-    
-    # 使用新密码重新登录
     echo "🔄 Logging in with new password..."
-    
-    # 获取新的登录页面和 CSRF token
-    login_page=$(curl -c cookies.txt -b cookies.txt -s -H "Accept: text/html" ${BASE_URL}/login)
-    csrf_token=$(echo "$login_page" | grep -o 'name="_csrf".*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | tr -d '\n')
-    
-    # 使用新密码登录
-    login_response=$(curl -X POST ${BASE_URL}/login \
-        -c cookies.txt -b cookies.txt \
+
+    login_page="$(curl_local -sS -c "$COOKIE_JAR" -b "$COOKIE_JAR" -H "Accept: text/html" "${BASE_URL}/login")"
+    csrf_token="$(printf '%s' "$login_page" | grep -o 'name="_csrf"[^>]*value="[^"]*"' | sed 's/.*value="\([^"]*\)".*/\1/' | head -n 1 || true)"
+
+    curl_local -sS -X POST "${BASE_URL}/login" \
+        -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
         -H "Accept: text/html,application/xhtml+xml" \
         -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=$USERNAME" \
-        -d "password=$NEW_PASSWORD" \
-        -d "_csrf=$csrf_token" \
-        -v 2>&1)
+        --data-urlencode "username=$USERNAME" \
+        --data-urlencode "password=$NEW_PASSWORD" \
+        --data-urlencode "_csrf=$csrf_token" \
+        -D "$HEADER_FILE" -o "$BODY_FILE"
+
+    location="$(extract_header "$HEADER_FILE" "location")"
+    cookie_session_id="$(extract_jsessionid "$HEADER_FILE")"
+    header_session_id="$(extract_header "$HEADER_FILE" "x-auth-token")"
 fi
 
-# 提取会话标识符（同时支持 Cookie 和 Header 方式）
-location=$(echo "$login_response" | grep -i "location:" | sed 's/.*Location: //' | tr -d '\r\n')
-cookie_session_id=$(echo "$login_response" | grep -i "set-cookie:" | grep -o "JSESSIONID=[^;]*" | cut -d= -f2)
-header_session_id=$(echo "$login_response" | grep -i "x-auth-token:" | sed 's/.*X-Auth-Token: //' | tr -d '\r\n')
-
-# 使用可用的会话标识符
-session_id=${header_session_id:-$cookie_session_id}
+session_id="${header_session_id:-$cookie_session_id}"
+extra_auth_args=()
+if [ -n "$header_session_id" ]; then
+    extra_auth_args=(-H "X-Auth-Token: $header_session_id")
+fi
 
 echo "🔄 Redirect Location: $location"
 echo "🎫 Session ID: $session_id (${header_session_id:+header}${cookie_session_id:+cookie})"
 
-# 为后续请求准备会话头
-if [ -n "$header_session_id" ]; then
-    session_headers="-H \"X-Auth-Token: $header_session_id\""
-else
-    session_headers=""
-fi
-
 # 验证登录是否成功
-if echo "$location" | grep -q "/error\|/login?error"; then
-    echo "❌ Login failed! Redirected to: $location"
+if [[ "$location" == *"/error"* ]] || [[ "$location" == *"/login?error"* ]]; then
+    echo "❌ Login failed! Redirected to: $location" >&2
     exit 1
 elif [ -z "$location" ]; then
-    echo "❌ Error: No redirect location found"
-    echo "📋 Response headers:"
-    echo "$login_response"
+    echo "❌ Error: No redirect location found after login" >&2
+    cat "$HEADER_FILE" >&2
     exit 1
 else
     echo "✅ Login successful! Redirected to: $location"
 fi
 
-# 保存会话 ID 供后续使用（可选）
-echo "export SESSION_ID=$session_id" > session.env
+printf 'export SESSION_ID=%q\n' "$session_id" > "$OUTPUT_DIR/session.env"
+chmod 600 "$OUTPUT_DIR/session.env"
 
 # 设置重定向 URI 并编码
 redirect_uri="http://127.0.0.1:3000/auth/callback"
-encoded_redirect_uri=$(urlencode "$redirect_uri")
+encoded_redirect_uri="$(urlencode "$redirect_uri")"
 echo "🌐 Redirect URI: $redirect_uri"
 
-# 获取授权页面时使用会话信息
-auth_page=$(curl -s \
-    ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
-    -c cookies.txt -b cookies.txt \
+# 获取授权页面或授权码重定向
+curl_local -sS \
+    ${extra_auth_args[@]+"${extra_auth_args[@]}"} \
+    -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
     --max-redirs 0 \
-    --no-location \
-    "${BASE_URL}/oauth2/authorize?\
-client_id=${CLIENT_ID}&\
-response_type=code&\
-scope=openid%20profile&\
-redirect_uri=${encoded_redirect_uri}&\
-code_challenge=${code_challenge}&\
-code_challenge_method=S256" \
-    -D - 2>/dev/null)
+    "${BASE_URL}/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&scope=openid%20profile&redirect_uri=${encoded_redirect_uri}&code_challenge=${code_challenge}&code_challenge_method=S256" \
+    -D "$HEADER_FILE" -o "$BODY_FILE"
 
 # 检查是否需要用户同意
-if echo "$auth_page" | grep -q "Consent required"; then
+if grep -q "Consent required" "$BODY_FILE"; then
     echo "🔑 Consent required"
-    # 从授权页面提取 state 值
-    state=$(echo "$auth_page" | sed -n 's/.*name="state" value="\([^"]*\).*/\1/p')
-    
+    state="$(sed -n 's/.*name="state"[^>]*value="\([^"]*\)".*/\1/p' "$BODY_FILE" | head -n 1 || true)"
+
     if [ -z "$state" ]; then
-        echo "❌ Error: Could not extract state from auth page"
-        echo "$auth_page"
+        echo "❌ Error: Could not extract state from consent page" >&2
+        head -n 30 "$BODY_FILE" >&2
         exit 1
     fi
-    
+
     echo "🔐 State: $state"
-    
-    # 提交授权确认
-    auth_response=$(curl -s \
-        ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
-        -c cookies.txt -b cookies.txt \
-        "${BASE_URL}/oauth2/authorize" \
+
+    curl_local -sS \
+        ${extra_auth_args[@]+"${extra_auth_args[@]}"} \
+        -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+        -X POST "${BASE_URL}/oauth2/authorize" \
         -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "client_id=${CLIENT_ID}" \
-        -d "state=$state" \
-        -d "scope=openid" \
-        -d "scope=profile" \
-        -d "submit=Submit+Consent" \
-        -D - 2>/dev/null)
-else
-    # 直接使用重定向响应
-    auth_response="$auth_page"
+        --data-urlencode "client_id=${CLIENT_ID}" \
+        --data-urlencode "state=$state" \
+        --data-urlencode "scope=openid" \
+        --data-urlencode "scope=profile" \
+        --data-urlencode "submit=Submit Consent" \
+        -D "$HEADER_FILE" -o "$BODY_FILE"
 fi
 
 # 从重定向 URL 中提取授权码
-location=$(echo "$auth_response" | grep -i "^location:" | sed 's/.*Location: //' | tr -d '\r\n')
-auth_code=$(echo "$location" | grep -o 'code=[^&]*' | cut -d= -f2)
+auth_location="$(extract_header "$HEADER_FILE" "location")"
+auth_code="$(printf '%s' "$auth_location" | sed -n 's/.*[?&]code=\([^&]*\).*/\1/p' | head -n 1 || true)"
 
 if [ -z "$auth_code" ]; then
-    echo "❌ Authorization failed!"
-    echo "Response headers:"
-    echo "$auth_response"
+    echo "❌ Authorization failed! Location: ${auth_location:-<empty>}" >&2
+    cat "$HEADER_FILE" >&2
     exit 1
 fi
 
 echo "✅ Authorization successful!"
 echo "🎫 Authorization Code: $auth_code"
 
-# 添加较短延迟
 echo "⏳ Waiting for authorization code to be processed..."
 sleep 0.1
 
-# 保存授权码供后续使用（可选）
-echo "export AUTH_CODE=$auth_code" > auth.env
+printf 'export AUTH_CODE=%q\n' "$auth_code" > "$OUTPUT_DIR/auth.env"
+chmod 600 "$OUTPUT_DIR/auth.env"
 
-# 检查必需的变量
-if [ -z "$auth_code" ] || [ -z "$redirect_uri" ] || [ -z "$code_verifier" ]; then
-    echo "❌ Error: Missing required parameters"
-    echo "Authorization Code: $auth_code"
-    echo "Redirect URI: $redirect_uri"
-    echo "Code Verifier: $code_verifier"
-    exit 1
-fi
-
-# 打印调试信息
-echo -e "\n🔍 Debug Information:"
+echo ""
+echo "🔍 Debug Information:"
 echo "Authorization Code: $auth_code"
 echo "Code Verifier: $code_verifier"
 echo "Redirect URI: $redirect_uri"
-echo "Basic Auth: $CLIENT_CREDENTIALS_B64"
+echo "Basic Auth: [HIDDEN]"
 
-# 编码 code_verifier
-encoded_code_verifier=$(urlencode "$code_verifier")
-
-# 编码 auth_code
-encoded_auth_code=$(urlencode "$auth_code")
-
-# 获取访问令牌
-echo -e "\n🔄 Requesting access token..."
-token_response=$(curl -v -X POST "${BASE_URL}/oauth2/token" \
-    ${session_headers:+-H "X-Auth-Token: $header_session_id"} \
+# 获取访问令牌（响应头与 JSON 响应体分离）
+echo ""
+echo "🔄 Requesting access token..."
+http_code="$(curl_local -sS -X POST "${BASE_URL}/oauth2/token" \
+    ${extra_auth_args[@]+"${extra_auth_args[@]}"} \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -H "Authorization: Basic $CLIENT_CREDENTIALS_B64" \
     -H "Accept: application/json" \
-    -d "grant_type=authorization_code" \
-    -d "code=$encoded_auth_code" \
-    -d "redirect_uri=$encoded_redirect_uri" \
-    -d "code_verifier=$encoded_code_verifier" \
-    -d "scope=openid%20profile" \
-    2>&1)
+    --data-urlencode "grant_type=authorization_code" \
+    --data-urlencode "code=$auth_code" \
+    --data-urlencode "redirect_uri=$redirect_uri" \
+    --data-urlencode "code_verifier=$code_verifier" \
+    --data-urlencode "scope=openid profile" \
+    -D "$HEADER_FILE" -o "$BODY_FILE" -w '%{http_code}')"
 
-# 打印完整的响应
-echo -e "\n📤 Full Response:"
-echo "$token_response"
-
-# 提取 JSON 部分
-json_response=$(echo "$token_response" | grep -v "^[*<>}]" | tail -n 1)
-
-# 检查响应是否包含错误
-if echo "$json_response" | jq -e 'has("error")' > /dev/null; then
-    echo -e "\n❌ Token request failed!"
-    echo "Error: $(echo "$json_response" | jq -r '.error')"
-    echo "Error description: $(echo "$json_response" | jq -r '.error_description // .message')"
-    echo "Full JSON response:"
-    echo "$json_response" | jq '.'
+if ! jq -e . "$BODY_FILE" >/dev/null 2>&1; then
+    echo "❌ Token endpoint returned non-JSON response (HTTP $http_code)" >&2
+    head -n 20 "$BODY_FILE" >&2
     exit 1
 fi
 
-# 提取令牌
-access_token=$(echo "$json_response" | jq -r '.access_token')
-refresh_token=$(echo "$json_response" | jq -r '.refresh_token')
-id_token=$(echo "$json_response" | jq -r '.id_token')
+if jq -e 'has("error")' "$BODY_FILE" >/dev/null 2>&1; then
+    echo "❌ Token request failed (HTTP $http_code)!" >&2
+    echo "Error: $(jq -r '.error' "$BODY_FILE")" >&2
+    echo "Error description: $(jq -r '.error_description // .message // ""' "$BODY_FILE")" >&2
+    exit 1
+fi
 
-# 验证是否成功获取到令牌
-if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
-    echo "❌ Failed to extract access token!"
-    echo "Response:"
-    echo "$json_response" | jq '.'
+access_token="$(jq -r '.access_token // empty' "$BODY_FILE")"
+refresh_token="$(jq -r '.refresh_token // empty' "$BODY_FILE")"
+id_token="$(jq -r '.id_token // empty' "$BODY_FILE")"
+
+if [ -z "$access_token" ]; then
+    echo "❌ Failed to extract access_token (HTTP $http_code)!" >&2
+    jq '.' "$BODY_FILE" >&2
     exit 1
 fi
 
@@ -349,49 +400,21 @@ echo "🔑 Access Token: ${access_token:0:50}..."
 echo "🔄 Refresh Token: ${refresh_token:0:50}..."
 echo "🎫 ID Token: ${id_token:0:50}..."
 
-# 保存令牌供后续使用（可选）
-echo "export ACCESS_TOKEN=$access_token" > tokens.env
-echo "export REFRESH_TOKEN=$refresh_token" >> tokens.env
-echo "export ID_TOKEN=$id_token" >> tokens.env
-
-# JWT 解码函数（兼容 macOS/Linux）
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    decode_jwt() {
-        local jwt_part=$1
-        local pad=$(( 4 - ${#jwt_part} % 4 ))
-        if [ $pad -ne 4 ]; then
-            jwt_part="${jwt_part}$(repeat_string '=' $pad)"
-        fi
-        jwt_part=$(echo "$jwt_part" | tr '_-' '/+')
-        echo "$jwt_part" | gbase64 -d 2>/dev/null
-    }
-else
-    decode_jwt() {
-        local jwt_part=$1
-        local pad=$(( 4 - ${#jwt_part} % 4 ))
-        if [ $pad -ne 4 ]; then
-            jwt_part="${jwt_part}$(repeat_string '=' $pad)"
-        fi
-        jwt_part=$(echo "$jwt_part" | tr '_-' '/+')
-        echo "$jwt_part" | base64 -d 2>/dev/null
-    }
-fi
+write_tokens_env "$access_token" "$refresh_token" "$id_token"
 
 # 显示令牌信息（解码 JWT）
-echo -e "\n📝 Access Token Claims:"
-if [ -n "$access_token" ]; then
-    token_body=$(echo "$access_token" | cut -d"." -f2)
-    decode_jwt "$token_body" | jq '.' || echo "❌ Failed to decode access token"
-else
-    echo "❌ No access token available"
-fi
+echo ""
+echo "📝 Access Token Claims:"
+token_body="$(printf '%s' "$access_token" | cut -d'.' -f2)"
+decode_jwt "$token_body" | jq '.' || echo "❌ Failed to decode access token"
 
-echo -e "\n📝 ID Token Claims:"
+echo ""
+echo "📝 ID Token Claims:"
 if [ -n "$id_token" ]; then
-    token_body=$(echo "$id_token" | cut -d"." -f2)
+    token_body="$(printf '%s' "$id_token" | cut -d'.' -f2)"
     decode_jwt "$token_body" | jq '.' || echo "❌ Failed to decode ID token"
 else
-    echo "❌ No ID token available"
+    echo "ℹ️  No ID token returned"
 fi
 
 # ============================================================================
@@ -399,55 +422,63 @@ fi
 # ============================================================================
 
 if [[ "$TEST_REFRESH_TOKEN" == "true" ]]; then
-    echo -e "\n🔄 Testing refresh token..."
-    
-    # 检查是否有可用的refresh_token
-    if [ -z "$refresh_token" ] || [ "$refresh_token" = "null" ]; then
-        echo "❌ No refresh token available for testing"
-    else
-        echo "Using refresh token: ${refresh_token:0:50}..."
-        
-        # 使用refresh_token获取新的access_token
-        refresh_response=$(curl -s -X POST "${BASE_URL}/oauth2/token" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -H "Authorization: Basic $CLIENT_CREDENTIALS_B64" \
-            -H "Accept: application/json" \
-            -d "grant_type=refresh_token" \
-            -d "refresh_token=$(urlencode "$refresh_token")" \
-            -d "scope=openid%20profile")
-        
-        # 检查刷新是否成功
-        if echo "$refresh_response" | jq -e 'has("error")' > /dev/null; then
-            echo "❌ Refresh token failed!"
-            echo "Error: $(echo "$refresh_response" | jq -r '.error')"
-            echo "Error description: $(echo "$refresh_response" | jq -r '.error_description // .message')"
-        else
-            new_access_token=$(echo "$refresh_response" | jq -r '.access_token')
-            new_refresh_token=$(echo "$refresh_response" | jq -r '.refresh_token')
-            
-            if [ -n "$new_access_token" ] && [ "$new_access_token" != "null" ]; then
-                echo "✅ Refresh token successful!"
-                echo "🔑 New Access Token: ${new_access_token:0:50}..."
-                if [ -n "$new_refresh_token" ] && [ "$new_refresh_token" != "null" ]; then
-                    echo "🔄 New Refresh Token: ${new_refresh_token:0:50}..."
-                fi
-                
-                # 更新tokens.env文件
-                echo "export ACCESS_TOKEN=$new_access_token" > tokens.env
-                echo "export REFRESH_TOKEN=${new_refresh_token:-$refresh_token}" >> tokens.env
-                echo "export ID_TOKEN=$id_token" >> tokens.env
-                
-                echo -e "\n📝 Refreshed Access Token Claims:"
-                token_body=$(echo "$new_access_token" | cut -d"." -f2)
-                decode_jwt "$token_body" | jq '.' || echo "❌ Failed to decode refreshed access token"
-            else
-                echo "❌ Failed to extract new access token from refresh response"
-            fi
-        fi
+    echo ""
+    echo "🔄 Testing refresh token..."
+
+    if [ -z "$refresh_token" ]; then
+        echo "❌ No refresh token available for testing" >&2
+        exit 1
     fi
+
+    echo "Using refresh token: ${refresh_token:0:50}..."
+
+    refresh_http_code="$(curl_local -sS -X POST "${BASE_URL}/oauth2/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -H "Authorization: Basic $CLIENT_CREDENTIALS_B64" \
+        -H "Accept: application/json" \
+        --data-urlencode "grant_type=refresh_token" \
+        --data-urlencode "refresh_token=$refresh_token" \
+        --data-urlencode "scope=openid profile" \
+        -D "$HEADER_FILE" -o "$BODY_FILE" -w '%{http_code}')"
+
+    if ! jq -e . "$BODY_FILE" >/dev/null 2>&1; then
+        echo "❌ Refresh token endpoint returned non-JSON response (HTTP $refresh_http_code)" >&2
+        head -n 20 "$BODY_FILE" >&2
+        exit 1
+    fi
+
+    if jq -e 'has("error")' "$BODY_FILE" >/dev/null 2>&1; then
+        echo "❌ Refresh token failed (HTTP $refresh_http_code)!" >&2
+        echo "Error: $(jq -r '.error' "$BODY_FILE")" >&2
+        echo "Error description: $(jq -r '.error_description // .message // ""' "$BODY_FILE")" >&2
+        exit 1
+    fi
+
+    new_access_token="$(jq -r '.access_token // empty' "$BODY_FILE")"
+    new_refresh_token="$(jq -r '.refresh_token // empty' "$BODY_FILE")"
+
+    if [ -z "$new_access_token" ]; then
+        echo "❌ Failed to extract new access_token from refresh response" >&2
+        exit 1
+    fi
+
+    echo "✅ Refresh token successful!"
+    echo "🔑 New Access Token: ${new_access_token:0:50}..."
+    if [ -n "$new_refresh_token" ]; then
+        echo "🔄 New Refresh Token: ${new_refresh_token:0:50}..."
+    fi
+
+    write_tokens_env "$new_access_token" "${new_refresh_token:-$refresh_token}" "$id_token"
+
+    echo ""
+    echo "📝 Refreshed Access Token Claims:"
+    token_body="$(printf '%s' "$new_access_token" | cut -d'.' -f2)"
+    decode_jwt "$token_body" | jq '.' || echo "❌ Failed to decode refreshed access token"
 else
-    echo -e "\n⏭️  Refresh token testing skipped (TEST_REFRESH_TOKEN=false)"
+    echo ""
+    echo "⏭️  Refresh token testing skipped (TEST_REFRESH_TOKEN=false)"
 fi
 
-echo -e "\n🎉 OAuth2 test completed!"
+echo ""
+echo "🎉 OAuth2 test completed!"
 

@@ -546,10 +546,8 @@ fetch_test_tokens() {
 
   info ""
   info "获取测试用户 Token（BASE_URL=http://localhost:${port}）..."
-  if BASE_URL="http://localhost:$port" bash "$script"; then
-    info "Token 汇总文件: $SCRIPT_DIR/scripts/all-test-tokens.env"
-  else
-    echo "WARNING: 测试 Token 获取失败（服务仍在运行）。" >&2
+  if ! BASE_URL="http://localhost:$port" bash "$script"; then
+    echo "WARNING: 测试 Token 获取失败或部分失败（服务仍在运行）。" >&2
     echo "         可手动重试: BASE_URL=http://localhost:$port bash $script" >&2
   fi
 }
@@ -623,7 +621,6 @@ cmd_start() {
   echo "  Log:      $logfile"
   echo "  Stop:     ./dev.sh stop --port $port"
   echo "  Follow:   ./dev.sh logs --port $port"
-  echo "  Tokens:   scripts/all-test-tokens.env"
   echo ""
 
   fetch_test_tokens "$port"
