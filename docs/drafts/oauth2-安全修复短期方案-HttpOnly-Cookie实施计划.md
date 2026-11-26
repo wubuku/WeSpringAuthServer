@@ -912,8 +912,8 @@ server {
 ## 📚 相关文档
 
 - [OAuth2 安全最佳实践](../oauth2-client-integration-guide.md)
-- [Spring Security 配置指南](../security-configuration-guide.md)
-- [微信小程序集成方案](./wechat-miniprogram-integration-plan.md)
+- [Spring Security 配置规则（.cursorrules）](../../.cursorrules)
+- [微信小程序集成方案](../wechat-miniprogram-auth-integration.md)
 
 ## 🔍 **关键检查点** (扩展)
 

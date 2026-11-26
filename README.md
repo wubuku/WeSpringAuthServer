@@ -584,11 +584,11 @@ curl -X POST "http://localhost:9000/oauth2/token" \
 
 #### 微信登录支持
 
-见[相关讨论](../../docs/微信登录支持.md)
+见[相关讨论](docs/wechat-miniprogram-auth-integration.md)
 
 #### 短信登录支持
 
-见[相关讨论](../../docs/短信登录支持.md)
+见[相关讨论](docs/drafts/阿里云短信服务_Spring_Boot_集成指南.md)
 
 ### 数据模型改进
 
@@ -801,3 +801,17 @@ brew install jq curl openssl postgresql
 # Ubuntu安装
 apt-get install jq curl openssl-tool postgresql-client
 ```
+
+## 📚 文档导航
+
+本项目采用 Hub → Guides → Reference 三层文档体系。已有文档保持原位，通过索引导航：
+
+| 入口 | 说明 |
+|------|------|
+| [AGENTS.md](AGENTS.md) | AI Agent 导航入口与约束 |
+| [CLAUDE.md](CLAUDE.md) | 日常开发速查手册 |
+| [.agent.md](.agent.md) / [.cursorrules](.cursorrules) | 项目须知与安全开发规则 |
+| [docs/README.md](docs/README.md) | 全项目文档导航中心（按主题索引） |
+| [.agents/skills/project-docs/](.agents/skills/project-docs/) | 文档体系建设与维护规范 |
+
+> 版本说明：本文及 `.agent.md` 中的 Spring Boot 3.2.0 / Spring Authorization Server 1.5.0 为历史记录；实际版本以 [pom.xml](pom.xml) 为准（3.4.6 / 1.3.6）。

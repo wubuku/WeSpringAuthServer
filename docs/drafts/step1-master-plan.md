@@ -341,8 +341,8 @@ echo "--- 验证增强的认证端点 ---"
 
 ### 实施参考
 - [Dan Vega的JWT实现](https://www.danvega.dev/blog/spring-security-jwt)
-- [完整验证方案](./drafts/step1-detailed-validation-plan.md)
-- [项目独立化状态](./drafts/project-independence-status.md)
+- [完整验证方案](./step1-detailed-validation-plan.md)
+- [项目独立化状态](./project-independence-status.md)
 
 ---
 

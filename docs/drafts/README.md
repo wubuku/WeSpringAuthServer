@@ -1,83 +1,73 @@
 # 草稿文档索引
 
-本目录包含STATELESS（无状态）认证解决方案的详细文档和进度跟踪。
+> **Purpose**: 活跃迭代的设计、安全审计与实施规划索引；已有草稿保持原位。
+> **Updated by**: 未记录（变更由人工提交）。
+> **Update rule**: 新增草稿即补一行（文件名 + 说明 + 最后更新）；完成并稳定 2 周后按归档规则处理。
 
-## 📋 主要文档
+## 文档体系建设
 
-### [OAuth2认证对比分析](./oauth2-session-vs-jwt-comprehensive-analysis.md)
-- OAuth2授权码流程的关键技术细节
-- Session vs JWT认证架构深度对比
-- API访问友好性机制技术验证
-- 性能与扩展性分析
-- 浏览器兼容性验证结果
+| 文件 | 说明 | 最后更新 |
+|------|------|----------|
+| [DOCUMENTATION_PLAN.md](DOCUMENTATION_PLAN.md) | 文档体系审计、优先级与本期范围 | 2026-11-26 |
 
-### [技术验证报告](./technical-validation-report.md)
-- Spring Authorization Server官方权威性验证
-- 权威实现案例分析
-- STATELESS架构技术可行性评估
-- 安全性验证和概念澄清
+## 认证架构与 STATELESS 研究
 
-### [第一步实施方案](./step1-master-plan.md) 🎯
-**主文档** - 基于现有JWT能力的认证统一化改进方案
-- 技术验证结果汇总
-- 文件修改清单和代码模板
-- 验证脚本和测试方案
-- 实施计划和风险控制
+| 文件 | 说明 | 最后更新 |
+|------|------|----------|
+| [oauth2-session-vs-jwt-comprehensive-analysis.md](oauth2-session-vs-jwt-comprehensive-analysis.md) | Session vs JWT 深度对比与技术验证 | 2025-06-11 |
+| [technical-validation-report.md](technical-validation-report.md) | Spring Authorization Server 官方实现与可行性验证 | 2025-06-11 |
+| [Spring_Authorization_Server_STATELESS方案研究.md](Spring_Authorization_Server_STATELESS方案研究.md) | STATELESS 架构方案研究 | 2025-06-11 |
+| [step1-master-plan.md](step1-master-plan.md) | 第一步主方案（修改清单、验证方案） | 2025-06-11 |
+| [step1-detailed-validation-plan.md](step1-detailed-validation-plan.md) | 端到端验证脚本与场景 | 2025-06-11 |
+| [STATELESS-migration-progress.md](STATELESS-migration-progress.md) | 实施进度与里程碑 | 2025-06-11 |
 
-## 📂 支持文档
+## 安全审计与修复
 
-### [详细验证计划](./step1-detailed-validation-plan.md)
-- 端到端验证脚本详细内容
-- 5个验证场景的完整实现
-- 自动化测试套件使用指南
+| 文件 | 说明 | 最后更新 |
+|------|------|----------|
+| [oauth2-安全修复短期方案-HttpOnly-Cookie实施计划.md](oauth2-安全修复短期方案-HttpOnly-Cookie实施计划.md) | HttpOnly Cookie 实施计划 | 2025-07-03 |
+| [OAuth2-安全修复短期方案-完成总结与评估.md](OAuth2-安全修复短期方案-完成总结与评估.md) | 安全修复完成总结与评估 | 2025-07-03 |
+| [Phase1-完成总结与下一步指南.md](Phase1-完成总结与下一步指南.md) | Phase 1 完成总结 | 2025-07-03 |
+| [Phase2-OAuth2-Cookie-Security-Implementation-Complete.md](Phase2-OAuth2-Cookie-Security-Implementation-Complete.md) | Phase 2 Cookie 安全实施完成 | 2025-07-03 |
+| [api-security-audit-progress.md](api-security-audit-progress.md) | API 安全审计进度 | 2025-06-20 |
+| [controller-security-detailed-review.md](controller-security-detailed-review.md) | Controller 安全详细审查 | 2025-06-20 |
+| [proactive-security-analysis.md](proactive-security-analysis.md) | 主动安全分析 | 2025-06-20 |
+| [remaining-security-assessment.md](remaining-security-assessment.md) | 剩余安全风险评估 | 2025-06-20 |
+| [security-fixes-summary.md](security-fixes-summary.md) | 安全修复汇总 | 2025-06-20 |
+| [refactoring-verification-checklist.md](refactoring-verification-checklist.md) | 重构验证清单 | 2025-06-19 |
+| [template-pages-audit-progress.md](template-pages-audit-progress.md) | 模板页面审计进度 | 2025-06-19 |
 
-### [项目独立化状态](./project-independence-status.md)
-- 项目从父模块独立的实施记录
-- 依赖版本升级和安全更新
-- 独立项目的基础设施完善
+## 登录方式与集成
 
-### [实施进度跟踪](./STATELESS-migration-progress.md)
-- 整体实施计划的进度记录
-- 各阶段完成状态和里程碑
-- 问题记录和解决方案
+| 文件 | 说明 | 最后更新 |
+|------|------|----------|
+| [sms-login-error-handling-improvement.md](sms-login-error-handling-improvement.md) | 短信登录错误处理改进 | 2025-10-28 |
+| [sms-login-demo-Cookie安全模式升级完成总结.md](sms-login-demo-Cookie安全模式升级完成总结.md) | 短信登录 Demo Cookie 模式升级 | 2025-07-03 |
+| [阿里云短信服务_Spring_Boot_集成指南.md](阿里云短信服务_Spring_Boot_集成指南.md) | 阿里云短信集成指南 | 2025-06-28 |
+| [阿里云短信服务切换指南.md](阿里云短信服务切换指南.md) | 短信供应商切换指南 | 2025-06-28 |
+| [partner-portal-client-integration.md](partner-portal-client-integration.md) | 合作伙伴门户客户端接入 | 2025-05-31 |
 
-## 🎯 使用指南
+## 数据与前端方案
 
-### 开始实施
-1. 阅读 [第一步实施方案](./step1-master-plan.md)
-2. 查看 [OAuth2认证对比分析](./oauth2-session-vs-jwt-comprehensive-analysis.md) 了解技术细节
-3. 运行验证脚本测试环境
-4. 按照文件修改清单开始coding
+| 文件 | 说明 | 最后更新 |
+|------|------|----------|
+| [测试数据准备.md](测试数据准备.md) | 测试用户与权限数据准备 | 2025-06-25 |
+| [测试数据准备-完成报告.md](测试数据准备-完成报告.md) | 测试数据准备完成报告 | 2025-06-25 |
+| [user-identifications-display-plan.md](user-identifications-display-plan.md) | 用户标识展示方案 | 2025-06-20 |
+| [极简微前端套件方案.md](极简微前端套件方案.md) | 微前端方案研究（历史提案） | 2025-07-15 |
+| [project-independence-status.md](project-independence-status.md) | 项目从父模块独立的状态记录 | 2025-06-11 |
 
-### 质量保证
-1. 使用 [详细验证计划](./step1-detailed-validation-plan.md) 中的测试脚本
-2. 确保Session模式功能完全不受影响
-3. 验证JWT模式的API访问功能
-4. 进行性能对比测试
+其他材料：`oauth2-security-env-config.example`、`test-data-for-user-identifications.sql`、`get_methods_test_summary.txt`。
 
-### 进度跟踪
-- 更新 [实施进度跟踪](./STATELESS-migration-progress.md)
-- 记录问题和解决方案
-- 维护文档的一致性
+## 技术概念澄清（保留原有结论）
 
-## 🔍 技术概念澄清
+- ✅ **STATELESS（无状态）认证架构** — 强调架构简化与无状态特性
+- ❌ ~~"跨域认证"~~ — 认证本身无法跨域；API 跨域访问本来就支持
+- 🔐 认证过程始终在授权服务器同域中安全进行（无论是否 STATELESS）
 
-### 准确的技术表述
-- ✅ **STATELESS（无状态）认证架构** - 强调架构简化和无状态特性
-- ❌ ~~"跨域认证"~~ - 认证本身无法跨域
-- ❌ ~~"支持跨域API访问"~~ - API跨域访问本来就支持
+## 使用指南
 
-### 架构核心价值
-- 🔐 **认证过程**：始终在授权服务器同域中安全进行（无论是否STATELESS）
-- ⚡ **STATELESS价值**：消除服务器状态依赖，简化架构，提升可扩展性
-- 📱 **实际收益**：减少基础设施复杂度，提升系统可扩展性
-
-## 📚 参考资料
-
-- [Spring Authorization Server官方文档](https://docs.spring.io/spring-authorization-server/reference/getting-started.html)
-- [Dan Vega的JWT实现教程](https://www.danvega.dev/blog/spring-security-jwt)
-- [技术验证报告中的权威案例](./technical-validation-report.md#权威实现案例分析)
-
----
-
-**当前状态**: 第一步方案已完全准备就绪，基于现有JWT能力进行优化增强 🚀 
+1. 架构背景 → [oauth2-session-vs-jwt-comprehensive-analysis.md](oauth2-session-vs-jwt-comprehensive-analysis.md)
+2. 安全现状 → [OAuth2-安全修复短期方案-完成总结与评估.md](OAuth2-安全修复短期方案-完成总结与评估.md)
+3. 实施验证 → [step1-detailed-validation-plan.md](step1-detailed-validation-plan.md) 与 [scripts/README.md](../../scripts/README.md)
+4. 完成并稳定 2 周后 → 移入 `../archive/` 并更新索引
