@@ -24,7 +24,7 @@ description: 为软件项目创建和维护系统化、AI Agent 友好的文档�
 | 项 | 事实 |
 |----|------|
 | 项目类型 | 单模块 Maven，独立 Spring Boot OAuth2 认证授权服务器（FFV Traceability 系统） |
-| 真实版本 | 以 `pom.xml` 为准：Java 17、Spring Boot **3.4.6**、Spring Security 6.2.0、Spring Authorization Server **1.3.6**（README/.agent.md 中 3.2.0、1.5.0 为历史值） |
+| 真实版本 | 以 `pom.xml` 为准：Java 17、Spring Boot **3.4.6**、Spring Security 6.2.0、Spring Authorization Server **1.3.6**（历史草稿中 3.2.0、1.5.0 为当时记录） |
 | 主类 / 端口 | `org.dddml.ffvtraceability.auth.AuthServerApplication` / **9000**（`SERVER_PORT` 可覆盖） |
 | 存储 | PostgreSQL + JdbcTemplate（无 JPA/MyBatis）+ Spring Session JDBC |
 | 关键安全 | 三条 SecurityFilterChain；授权码 + PKCE；JWT 自定义 claims；HttpOnly refresh_token Cookie；层级权限 `authority_definitions`；短信/微信登录 |
@@ -329,7 +329,7 @@ find . -name "*.md" \
 
 ## 质量检查清单
 
-详见 `references/checklist.md`。每个文档至少：遵循模板结构、命令已验证、无重复正文（用链接）、交叉链接有效。
+详见 [references/checklist.md](references/checklist.md)。每个文档至少：遵循模板结构、命令已验证、无重复正文（用链接）、交叉链接有效。
 
 `AGENTS.md`：≤120 行、P0/P1 已索引、快速命令齐全、Agent 约束清晰。
 
@@ -351,9 +351,9 @@ find . -name "*.md" \
 
 ## 参考模板
 
-`references/templates.md`：README、AGENTS、CLAUDE/速查、docs/README、草稿/归档索引、Architecture、Testing、Troubleshooting、DOCUMENTATION_PLAN 模板。
+[references/templates.md](references/templates.md)：README、AGENTS、CLAUDE/速查、docs/README、草稿/归档索引、Architecture、Testing、Troubleshooting、DOCUMENTATION_PLAN 模板。
 
-`references/checklist.md`：创建前、各文档、链接、最终验证清单。
+[references/checklist.md](references/checklist.md)：创建前、各文档、链接、最终验证清单。
 
 ---
 

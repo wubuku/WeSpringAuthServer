@@ -56,8 +56,8 @@ defaultSecurityFilterChain (all others)                → Form login + SMS + We
 src/main/java/org/dddml/ffvtraceability/auth/
 ├── AuthServerApplication.java          # Main entry point
 ├── authentication/                     # Custom auth providers (SMS, WeChat, UsernamePassword)
-├── config/                             # 25+ Spring config classes
-├── controller/                         # 27 REST/Web controllers
+├── config/                             # 23 Spring config classes
+├── controller/                         # 25 REST/Web controllers
 ├── service/                            # Business services + SMS providers
 ├── security/                          # CustomUserDetails, handlers
 ├── dto/                               # Data transfer objects

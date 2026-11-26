@@ -17,10 +17,12 @@
 ### 技术栈
 
 - **Java**: 17
-- **Spring Boot**: 3.2.0
+- **Spring Boot**: 3.4.6
 - **Spring Security**: 6.2.0
-- **Spring Authorization Server**: 最新版本
+- **Spring Authorization Server**: 1.3.6
 - **Database**: PostgreSQL
+
+> 版本以 [pom.xml](pom.xml) 为准；历史草稿中的 3.2.0 / 1.5.0 为其当时的记录。
 
 ## 快速开始
 
@@ -818,4 +820,4 @@ apt-get install jq curl openssl-tool postgresql-client
 | [docs/README.md](docs/README.md) | 全项目文档导航中心（按主题索引） |
 | [.agents/skills/project-docs/](.agents/skills/project-docs/) | 文档体系建设与维护规范 |
 
-> 版本说明：本文及 `.agent.md` 中的 Spring Boot 3.2.0 / Spring Authorization Server 1.5.0 为历史记录；实际版本以 [pom.xml](pom.xml) 为准（3.4.6 / 1.3.6）。
+> 版本说明：技术栈版本已按 [pom.xml](pom.xml) 校正；历史草稿中的旧版本为其当时的记录。

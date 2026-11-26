@@ -68,3 +68,28 @@
 ### 适用流程
 
 本轮仅为文字修订与索引维护，不改变系统行为，**未触发**技能中的"规划三轮收敛"与"实现代码三轮收敛"；仍执行 Step 4 的链接与事实一致性验证。
+
+---
+
+## 7. 第三轮整理（2026-11-26，空杯审计）
+
+### 触发
+
+第二轮后无新代码提交（`a9f7b2b` 仍为 HEAD）。按用户要求以"空杯心态"重新审视整个文档体系，不沿用前两轮的结论，直接从代码与配置反查文档事实。
+
+### 审计发现
+
+1. **P0 文档事实漂移**：`.agent.md` 两处（Overview 与 Technology Stack）仍写 Spring Boot 3.2.0 / SAS 1.5.0，根 `README.md` 技术栈写 3.2.0 / "最新版本"，与 `pom.xml`（3.4.6 / 1.3.6）冲突。两者都是 Agent/人类的首读入口，比历史草稿更需要准确；`AGENTS.md` / `SKILL.md` 中"旧文档仍写旧版本"的括号说明也随之失效，需一并修正。
+2. **`CLAUDE.md` 计数过时**：`config/` 写"25+"（实际 23 个 Java 文件）、`controller/` 写"27"（实际 25 个）。
+3. **导航链接不显式**：`docs/README.md` 的分类表只链到目录，`docs/development-guides/README.md`、`docs/technology-stack/README.md`、`docs/operations-guides/README.md` 从 Hub 不可直接点击到达；`SKILL.md` 对 `references/checklist.md`、`references/templates.md` 只用反引号提及，不可点击。可达性审计显示 5 个文件为非 Hub 可达。
+4. **前轮决策需修订**：第 3 节"不批量改写旧版本号"与第 6 节"不批量修正旧版本号"的约束，在 P0 文档范围内被本轮推翻；历史草稿仍保持原样。
+5. **链接与骨架**：163 条相对链接全部有效；草稿索引 28 篇全覆盖；技能声称的根目录状态（无 `MEMORY.md`、`LICENSE`、`CONTRIBUTING.md`、`.cursor/rules/`）经复核均成立。
+
+### 范围与非目标
+
+- 范围：修正 `.agent.md`、根 `README.md` 的版本号及 `AGENTS.md` / `SKILL.md` 的关联说明；修正 `CLAUDE.md` 的两个计数；把 Hub 与技能中的目录链接/纯文本引用改为显式 Markdown 链接；记录本轮审计。
+- 非目标：不改任何代码、脚本或配置；不改写 `docs/drafts/` 下历史草稿的版本描述（它们是当时状态的记录）；不新建文档、不移动文档；不猜测 `LICENSE`。
+
+### 适用流程
+
+同为纯文档修订，不改变系统行为，**未触发**三轮收敛；执行 Step 4 的链接、事实与计数验证。

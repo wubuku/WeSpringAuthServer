@@ -8,12 +8,12 @@
 
 | 目录 | 说明 |
 |------|------|
-| [development-guides/](development-guides/) | 本地搭建、启动、配置、数据准备 |
-| [technology-stack/](technology-stack/) | 技术栈与关键机制（OAuth2、JWT、权限、第三方登录） |
-| [api-testing/](api-testing/) | API 与 OAuth2 流程测试、集成指南 |
-| [operations-guides/](operations-guides/) | 部署、密钥、Docker、运维 |
-| [drafts/](drafts/) | 活跃草稿、安全审计与实施规划 |
-| [archive/](archive/) | 归档文档（按需创建） |
+| [development-guides/README.md](development-guides/README.md) | 本地搭建、启动、配置、数据准备 |
+| [technology-stack/README.md](technology-stack/README.md) | 技术栈与关键机制（OAuth2、JWT、权限、第三方登录） |
+| [api-testing/README.md](api-testing/README.md) | API 与 OAuth2 流程测试、集成指南 |
+| [operations-guides/README.md](operations-guides/README.md) | 部署、密钥、Docker、运维 |
+| [drafts/README.md](drafts/README.md) | 活跃草稿、安全审计与实施规划 |
+| [archive/README.md](archive/README.md) | 归档文档索引 |
 
 ## 已有文档：按主题归类（链接，不移动）
 

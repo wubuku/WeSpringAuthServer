@@ -7,7 +7,7 @@
 ## 1. 项目概览
 
 - **类型**：独立 Spring Boot OAuth2 认证授权服务器（FFV Traceability 系统）
-- **技术栈**：Java 17 / Spring Boot **3.4.6** / Spring Security 6.2.0 / Spring Authorization Server **1.3.6** / PostgreSQL / JdbcTemplate（**以 `pom.xml` 为准**；`README.md`、`.agent.md` 中 3.2.0、1.5.0 为历史值）
+- **技术栈**：Java 17 / Spring Boot **3.4.6** / Spring Security 6.2.0 / Spring Authorization Server **1.3.6** / PostgreSQL / JdbcTemplate（**以 `pom.xml` 为准**；历史草稿中的 3.2.0、1.5.0 为当时记录）
 - **状态**：多认证方式（密码/短信/微信）、PKCE、JWT、层级权限与生产部署配置已就绪；服务端口 **9000**
 - **主类**：`org.dddml.ffvtraceability.auth.AuthServerApplication`
 
