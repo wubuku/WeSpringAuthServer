@@ -365,19 +365,19 @@ function decodeJWT(token) {
 
 ## 使用 Shell 脚本测试授权码流程
 
-见：`src/ffvtraceability-auth-server/scripts/test.sh`
+见：[scripts/test.sh](scripts/test.sh)（脚本索引见 [scripts/README.md](scripts/README.md)）
 
 ## "测试资源服务器"的端到端测试（授权码流程测试）
 
 我们创建了一个供测试用的资源服务器项目，包含了授权码流程的测试。
-相关描述见：`src/ffvtraceability-resource-server/README.md`
+相关描述见：[example-resource-server/README.md](example-resource-server/README.md)
 
 
 ## 测试 Web 前端 OAuth2 授权码流程
 
 
-在追溯系统 API 服务中，包含了测试 OAuth2 授权码流程的前端页面。
-见这里的描述：`src/ffvtraceability-service-rest/README.md`
+独立后的认证服务器自带测试页面 `/oauth2-test`，可直接验证授权码 + PKCE 流程。
+见本页「在 Auth Server 测试页面上测试 OAuth 2.0 授权码流程」一节，以及 [API 测试索引](docs/api-testing/README.md)。
 
 
 
@@ -461,7 +461,9 @@ INSERT INTO ~~permissions~~ authority_definitions (~~permission_id~~ authority_i
 
 ## 授权码流程测试脚本解析
 
-脚本见代码库根目录下的 `src/ffvtraceability-auth-server/scripts/test.sh`。
+脚本见 [scripts/test.sh](scripts/test.sh)。
+
+> 说明：以下为流程示意。当前脚本已启用 `set -euo pipefail`，cookies 与响应头放在 `mktemp` 临时目录并在退出时清理，不再在当前目录留下 `cookies.txt`；令牌文件原子写入并 `chmod 600`。详见 [scripts/README.md](scripts/README.md)。
 
 ### 1. PKCE 参数生成
 ```bash
@@ -529,7 +531,7 @@ curl -X POST "http://localhost:9000/oauth2/token" \
 
 ## 更多参考信息
 
-见：`docs/OAuth2_授权码流程与安全实践详解.md`
+见 [OAuth2 客户端集成指南](docs/oauth2-client-integration-guide.md)、[Session vs JWT 深度分析](docs/drafts/oauth2-session-vs-jwt-comprehensive-analysis.md) 与 [资源服务器集成指南](docs/resource-server-integration-guide.md)。
 
 
 
@@ -655,6 +657,8 @@ source all-test-tokens.env
 # 使用令牌测试API
 curl -H "Authorization: Bearer $HQ_ADMIN_ACCESS_TOKEN" http://localhost:9000/api/users
 ```
+
+汇总文件默认 `scripts/all-test-tokens.env`，原子写入并 `chmod 600`；可用 `-o/--output` 改路径、`-r/--refresh` 刷新、`-d/--decode` 打印解码结果。任一用户失败即返回非零退出码。详见 [scripts/README.md](scripts/README.md)。
 
 ### 脚本开发规范
 

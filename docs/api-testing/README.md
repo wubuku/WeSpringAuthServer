@@ -31,4 +31,6 @@
     bash scripts/verify-oauth2-security.sh      # OAuth2 安全配置验证
     bash scripts/test-permissions.sh            # 权限系统测试
 
+`test.sh` 与 `get-test-user-tokens.sh` 已于 2026-11-26 加固：临时产物隔离在 `mktemp` 目录并退出清理；`TEST_OUTPUT_DIR` 控制令牌输出目录；汇总文件默认 `scripts/all-test-tokens.env`、原子写入并 `chmod 600`，支持 `-o/--output`、`-r/--refresh`、`-d/--decode`；任一用户失败返回非零退出码。细节见 [scripts/README.md](../../scripts/README.md)。
+
 > 令牌、验证码等敏感值只存在于运行时环境，不得写入文档或提交的环境文件。

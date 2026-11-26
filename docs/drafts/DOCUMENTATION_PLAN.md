@@ -1,6 +1,6 @@
 # 文档体系建设规划
 
-> **Purpose**: 记录本次文档审计结果、优先级、范围与有意不做的项。
+> **Purpose**: 记录文档审计结果、优先级、范围与有意不做的项（含第二轮整理）。
 > **Updated by**: 未记录（变更由人工提交）。
 > **Update rule**: 体系调整时更新；完成项标注日期，不写流水账。
 
@@ -45,4 +45,26 @@
 
 - 根 `README.md` 与 `.agent.md` 中的旧版本号待后续单独修订（需人工确认改动范围）。
 - `LICENSE` / `CONTRIBUTING.md` 待项目所有者决策。
-- `docs/archive/` 尚未建立，待首批草稿满足归档条件（功能实现 + 稳定 2 周）后创建。
+- `docs/archive/` 已建立索引（[README.md](../archive/README.md)），暂无归档条目；待首批草稿满足归档条件（功能实现 + 稳定 2 周）后迁入。
+
+---
+
+## 6. 第二轮整理（2026-11-26）
+
+### 触发与审计
+
+第一轮提交 `4f97f9b` 后新增提交 `adad099 refactor(scripts): harden OAuth2 test scripts and isolate token artifacts`，改动 `dev.sh`、`scripts/test.sh`、`scripts/get-test-user-tokens.sh`，改变了脚本接口与产物行为。按技能的"代码变更 = 同一提交中更新文档"与 Step 4 验证要求，复核全部文档，发现：
+
+1. **脚本索引缺失**：`scripts/README.md` 没有 `test.sh` 条目，也遗漏了 `docker-build-local.sh`、`generate-production-config.sh` 等已有脚本。
+2. **脚本行为过时**：`scripts/README.md` 把 `cookies.txt` 列为"Cookie测试数据"，但 `test.sh` 现改用 `mktemp` 临时目录并在退出时清理；`get-test-user-tokens.sh` 新增 `-r/--refresh`、`-d/--decode`、`-o/--output`，产物原子写入并 `chmod 600`，任一用户失败即非零退出。
+3. **失效的旧父项目路径**：根 `README.md` 仍有 5 处指向 `src/ffvtraceability-*` 或不存在文档的路径（第 368、373、380、464、532 行）。
+4. **本规划文档过时**：第 5 节曾写"`docs/archive/` 尚未建立"，与第一步已创建索引的事实不符（本轮已修正）。
+
+### 范围与非目标
+
+- 范围：更新 `scripts/README.md`、根 `README.md` 的失效引用与脚本说明、`docs/api-testing/README.md` 的脚本入口说明。
+- 非目标：不改任何脚本代码；不重写 `README.md` 中 PKCE 流程示意代码（仅在章节开头加"当前脚本已隔离临时产物"的说明）；不批量修正旧版本号；不移动任何文档。
+
+### 适用流程
+
+本轮仅为文字修订与索引维护，不改变系统行为，**未触发**技能中的"规划三轮收敛"与"实现代码三轮收敛"；仍执行 Step 4 的链接与事实一致性验证。

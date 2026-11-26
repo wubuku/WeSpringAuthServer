@@ -17,6 +17,21 @@ bash scripts/start-cookie-demo.sh
 
 ## 🧪 核心功能测试脚本
 
+### `test.sh`
+**OAuth2 授权码流程端到端测试（加固版）**
+- `set -euo pipefail`，启动前检查 `curl`/`jq`/`openssl`/`base64` 依赖
+- cookies 与响应头放在 `mktemp` 临时目录，`EXIT` trap 自动清理，**不再在当前目录留下 `cookies.txt`**
+- `TEST_OUTPUT_DIR` 控制 `tokens.env` / `auth.env` / `session.env` 的输出目录（默认当前目录以保持兼容）
+- 本地回环绕过代理并设超时；响应头与 JSESSIONID 提取兼容大小写及 HTTP/1.1、HTTP/2
+- 令牌文件原子写入并 `chmod 600`；运行前清理旧 `tokens.env`，失败不会被误读旧值
+
+```bash
+bash scripts/test.sh
+TEST_USERNAME=admin TEST_PASSWORD=admin bash scripts/test.sh
+```
+
+可用环境变量：`TEST_USERNAME`、`TEST_PASSWORD`、`TEST_BASE_URL`、`TEST_OUTPUT_DIR`、`TEST_REFRESH_TOKEN`。
+
 ### `test-sms-login.sh`
 **SMS登录端到端测试脚本（包含Cookie支持）**
 - 测试SMS验证码发送和登录流程
@@ -113,13 +128,20 @@ bash scripts/test-api-security.sh
 ## 🛠️ 工具脚本
 
 ### `get-test-user-tokens.sh`
-**测试用户token获取工具**
-- 自动获取测试用户的access_token
-- 用于其他脚本的token准备
+**批量获取测试用户 Token**
+- 通过 `test.sh` 驱动多用户流程，临时产物隔离到 `mktemp` 目录并自动清理
+- 汇总文件默认 `scripts/all-test-tokens.env`，原子写入并 `chmod 600`；全部失败时不覆盖已有文件
+- 任一用户失败即返回非零退出码，便于 `dev.sh` / CI 感知
+- 依赖 `jq`；`--help` 可独立查看，不依赖 `test.sh` 是否存在
 
 ```bash
-bash scripts/get-test-user-tokens.sh
+bash scripts/get-test-user-tokens.sh --help
+bash scripts/get-test-user-tokens.sh                          # 默认输出 scripts/all-test-tokens.env
+bash scripts/get-test-user-tokens.sh -o /tmp/my-tokens.env    # 指定输出文件
+bash scripts/get-test-user-tokens.sh -r -d                    # 刷新一次并打印解码结果
 ```
+
+选项：`-r/--refresh`、`-d/--decode`、`-o/--output PATH`、`-h/--help`。环境变量：`BASE_URL`、`OUTPUT_FILE`、`TEST_OUTPUT_DIR`。
 
 ### `generate-jwt-keystore.sh`
 **JWT密钥库生成工具**
@@ -130,7 +152,23 @@ bash scripts/get-test-user-tokens.sh
 bash scripts/generate-jwt-keystore.sh
 ```
 
+### 其他工具脚本
+
+| 脚本 | 说明 |
+|------|------|
+| `generate-production-config.sh` | 交互式生成 `.env.prod` 与 JWT 密钥（生产配置生成工具，见根 README） |
+| `get-user-token.sh` | 获取单个用户的 Token |
+| `password-encoder-help.sh` | 生成 BCrypt 编码密码的辅助脚本 |
+| `test-cross-platform-compatibility.sh` | 跨平台兼容性检查 |
+
 ## 🐳 Docker 构建
+
+### `docker-build-local.sh`
+**本地 Docker 镜像构建（不推送仓库）**
+
+```bash
+bash scripts/docker-build-local.sh
+```
 
 ### `docker-build-push.sh`
 **本地Docker构建脚本** - 替代GitHub Actions的本地构建方案
@@ -165,7 +203,7 @@ docker pull --platform linux/amd64 your_username/wespring-auth-server:latest
 - `insert-test-users.sql` - 测试用户数据插入脚本
 
 ### 其他工具文件
-- `cookies.txt` - Cookie测试数据
+- `cookies.txt` — 历史遗留 Cookie 测试数据；当前 `scripts/test.sh` 改用 `mktemp` 临时目录并在退出时清理，**不再生成工作目录中的 `cookies.txt`**
 - `README-wechat-test.md` - 微信测试详细说明
 
 ## 🎯 推荐使用流程
@@ -216,6 +254,7 @@ bash scripts/test-method-security.sh
 2. **敏感信息**: 测试脚本可能包含测试用的敏感信息，请妥善保管
 3. **Cookie安全**: Cookie相关测试验证了HttpOnly、Secure、SameSite等安全特性
 4. **权限验证**: 所有权限相关测试都遵循最小权限原则
+5. **令牌产物权限**: `tokens.env` / `all-test-tokens.env` 等由脚本原子写入并设为 `600`，不要提交或改成宽松权限
 
 ---
 
