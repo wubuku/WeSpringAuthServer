@@ -10,11 +10,12 @@
 #   - JDK：优先对齐 IDEA 项目 SDK（JDK 24），避免使用 PATH 上的 JDK 25（Lombok 可能不兼容）
 #
 # 用法：
-#   ./dev.sh                         增量构建并以 dev profile 启动（默认端口 9000，后台运行）
-#   ./dev.sh --port 9001             指定端口（等价 SERVER_PORT=9001）
+#   ./dev.sh                         增量构建并启动（默认端口 9000，后台运行；就绪后自动获取并打印测试 Token）
+#   ./dev.sh --port 9001             指定端口（等价 SERVER_PORT=9001，Token 脚本同步使用该端口）
 #   ./dev.sh --force-kill            强杀目标端口上的任意监听进程后再启动
 #   ./dev.sh clean                   先 mvn clean 再构建启动
 #   ./dev.sh --no-build              跳过构建，直接用 target 下已有的 jar 启动
+#   ./dev.sh --no-tokens             启动后不自动获取测试 Token
 #   ./dev.sh --foreground            前台运行，日志直出终端，Ctrl-C 停止（最接近 IDEA Run 窗口）
 #   ./dev.sh stop [--port N]         停止本脚本管理的进程
 #   ./dev.sh stop --port N --force-kill  强杀指定端口上的任意监听进程
@@ -23,8 +24,9 @@
 #   ./dev.sh logs [--port N]         跟踪某个实例的日志
 #   ./dev.sh --help                  完整帮助
 #
-# 运行产物都在 target/dev/ 下（已被 .gitignore 覆盖）：
-#   auth-server-<port>.pid / auth-server-<port>.log
+# 运行产物：
+#   target/dev/auth-server-<port>.pid / .log（已被 .gitignore 覆盖）
+#   scripts/all-test-tokens.env（测试 Token 汇总，已被 .gitignore 覆盖）
 # ============================================================
 
 set -euo pipefail
@@ -45,6 +47,7 @@ CLEAN_BUILD=false
 NO_BUILD=false
 FOREGROUND=false
 NO_HEALTH_CHECK=false
+NO_TOKENS=false
 TIMEOUT_ARG=""
 ENV_FILE="${DEV_ENV_FILE:-$SCRIPT_DIR/.env}"
 JAVA_HOME_OVERRIDE="${DEV_JAVA_HOME:-}"
@@ -70,6 +73,7 @@ Options:
   --java-home PATH     指定 JDK HOME（默认优先 JDK 24，对齐 IDEA 项目 SDK）
   --timeout N          启动健康检查超时秒数（默认 180）
   --no-health-check    不等待 /health 就绪，启动后立即返回
+  --no-tokens          启动后不自动获取/打印测试用户 Token
   -h, --help, help     显示本帮助
 
 Examples:
@@ -117,6 +121,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --no-health-check)
       NO_HEALTH_CHECK=true
+      shift
+      ;;
+    --no-tokens)
+      NO_TOKENS=true
       shift
       ;;
     --env-file)
@@ -519,6 +527,33 @@ wait_for_ready() {
   exit 1
 }
 
+fetch_test_tokens() {
+  local port="$1" script="$SCRIPT_DIR/scripts/get-test-user-tokens.sh"
+
+  if [ "$NO_TOKENS" = true ]; then
+    info "跳过测试 Token 获取（--no-tokens）。"
+    return 0
+  fi
+  if [ "$NO_HEALTH_CHECK" = true ]; then
+    echo "WARNING: 已跳过健康检查，无法保证服务就绪，本次不获取测试 Token。" >&2
+    echo "         就绪后可手动执行: BASE_URL=http://localhost:$port bash $script" >&2
+    return 0
+  fi
+  if [ ! -f "$script" ]; then
+    echo "WARNING: 找不到 ${script}，跳过测试 Token 获取。" >&2
+    return 0
+  fi
+
+  info ""
+  info "获取测试用户 Token（BASE_URL=http://localhost:${port}）..."
+  if BASE_URL="http://localhost:$port" bash "$script"; then
+    info "Token 汇总文件: $SCRIPT_DIR/scripts/all-test-tokens.env"
+  else
+    echo "WARNING: 测试 Token 获取失败（服务仍在运行）。" >&2
+    echo "         可手动重试: BASE_URL=http://localhost:$port bash $script" >&2
+  fi
+}
+
 cmd_start() {
   local port="" pidfile="" logfile="" pid=""
 
@@ -553,6 +588,10 @@ cmd_start() {
 
   if [ "$FOREGROUND" = true ]; then
     info "  前台模式：日志直接输出到终端，Ctrl-C 停止。"
+    if [ "$NO_TOKENS" = false ]; then
+      info "  前台模式不自动获取测试 Token；就绪后可在另一终端执行:"
+      info "    BASE_URL=http://localhost:$port bash $SCRIPT_DIR/scripts/get-test-user-tokens.sh"
+    fi
     echo "$$" > "$pidfile"
     exec "$JAVA_BIN" -jar "$BUILD_JAR" \
       --spring.profiles.active=dev \
@@ -584,6 +623,10 @@ cmd_start() {
   echo "  Log:      $logfile"
   echo "  Stop:     ./dev.sh stop --port $port"
   echo "  Follow:   ./dev.sh logs --port $port"
+  echo "  Tokens:   scripts/all-test-tokens.env"
+  echo ""
+
+  fetch_test_tokens "$port"
 }
 
 # 尽早校验显式端口，避免把参数错误拖到构建之后才发现。

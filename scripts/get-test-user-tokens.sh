@@ -8,20 +8,33 @@
 #
 # 选项（默认全部关闭，以避免对本地环境造成副作用）:
 #   -r, --refresh   在获取后尝试刷新一次，并输出刷新结果（默认：关闭）
-#                   实现方式：给 test.sh 传递 TEST_REFRESH_TOKEN=true 环境变量；
-#                   不会修改 test.sh 文件本身。
+#                   实现方式：给 test.sh 传递 TEST_REFRESH_TOKEN=true 环境变量。
 #   -d, --decode    打印最终（刷新后或初次）access token 的解码结果（默认：关闭）
 #                   会解码并高亮显示 groups 与 authorities，便于核验权限。
 #   -h, --help      显示帮助并退出。
 #
+# 环境变量:
+#   BASE_URL        授权服务器地址，默认 http://localhost:9000
+#                   dev.sh 会以实际启动端口传入，避免 test.sh 打错地址。
+#
 # 说明:
-# - 本脚本会临时修改 test.sh 中的 USERNAME/PASSWORD 后执行，再恢复备份；
+# - 通过 TEST_USERNAME / TEST_PASSWORD / TEST_BASE_URL 环境变量驱动 test.sh，
+#   不再临时改写 test.sh 文件，避免中断后留下被改坏的文件或 .backup 残留；
 # - 不会修改 test.sh 的 TEST_REFRESH_TOKEN 配置，避免对他处测试产生影响；
-# - 若启用 --refresh，则通过 “TEST_REFRESH_TOKEN=true ./test.sh” 的环境变量方式开启刷新测试；
+# - 若启用 --refresh，则通过 “TEST_REFRESH_TOKEN=true ./test.sh” 开启刷新测试；
 # - 若启用 --decode，则在每个用户成功获取 token 后解码打印 claims。
+
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+cd "$SCRIPT_DIR"
+
+[ -f "$SCRIPT_DIR/test.sh" ] || { echo "❌ 找不到 test.sh: $SCRIPT_DIR/test.sh" >&2; exit 1; }
+
+BASE_URL="${BASE_URL:-http://localhost:9000}"
 
 echo "🚀 获取所有测试用户的 JWT 令牌"
 echo "========================================"
+echo "   目标服务: $BASE_URL"
 echo ""
 
 # 选项默认值（均为关闭）
@@ -93,31 +106,23 @@ fi
 get_user_token() {
     local username=$1
     local password=$2
-    
+    local access_token=""
+    local refresh_token=""
+
     echo "🔄 正在获取用户 $username 的令牌..."
-    
-    # 临时修改test.sh的用户配置
-    cp test.sh test.sh.backup
-    # 兼容 macOS 和 Linux 的 sed 语法
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s/USERNAME=\".*\"/USERNAME=\"$username\"/" test.sh
-        sed -i '' "s/PASSWORD=\".*\"/PASSWORD=\"$password\"/" test.sh
-    else
-        sed -i "s/USERNAME=\".*\"/USERNAME=\"$username\"/" test.sh
-        sed -i "s/PASSWORD=\".*\"/PASSWORD=\"$password\"/" test.sh
-    fi
-    
-    # 运行 test.sh
-    # 若启用 --refresh，则通过环境变量开启刷新测试；否则保持 test.sh 默认逻辑
+
+    # 通过环境变量驱动 test.sh，不再改写文件本身；BASE_URL 支持 dev.sh 自定义端口
     if [[ "$ENABLE_REFRESH" == "1" ]]; then
-        if TEST_REFRESH_TOKEN=true ./test.sh > /dev/null 2>&1; then
+        if TEST_BASE_URL="$BASE_URL" TEST_USERNAME="$username" TEST_PASSWORD="$password" \
+           TEST_REFRESH_TOKEN=true ./test.sh > /dev/null 2>&1; then
             :
         else
             echo "❌ 获取用户 $username 的令牌失败"
             return 1
         fi
     else
-        if ./test.sh > /dev/null 2>&1; then
+        if TEST_BASE_URL="$BASE_URL" TEST_USERNAME="$username" TEST_PASSWORD="$password" \
+           ./test.sh > /dev/null 2>&1; then
             :
         else
             echo "❌ 获取用户 $username 的令牌失败"
@@ -125,12 +130,12 @@ get_user_token() {
         fi
     fi
 
-    # 检查tokens.env文件是否存在且包含令牌
+    # 检查tokens.env文件是否存在且包含令牌（用 sed 取整行值，避免 cut 截断含 = 的值）
     if [ -f "tokens.env" ]; then
-        local access_token=$(grep "export ACCESS_TOKEN=" tokens.env | cut -d'=' -f2)
-        local refresh_token=$(grep "export REFRESH_TOKEN=" tokens.env | cut -d'=' -f2)
-        
-        if [ -n "$access_token" ] && [ "$access_token" != "" ]; then
+        access_token=$(sed -n 's/^export ACCESS_TOKEN=//p' tokens.env | head -n 1)
+        refresh_token=$(sed -n 's/^export REFRESH_TOKEN=//p' tokens.env | head -n 1)
+
+        if [ -n "$access_token" ]; then
             local upper_username=$(echo "$username" | tr '[:lower:]' '[:upper:]')
             echo "✅ 成功获取用户 $username 的令牌"
             echo ""
@@ -203,21 +208,27 @@ for user_info in "${users[@]}"; do
     password=$(echo "$user_info" | cut -d':' -f2)
     
     if get_user_token "$username" "$password"; then
-        ((success_count++))
+        success_count=$((success_count + 1))
     fi
-    
-    # 恢复原始的test.sh
-    mv test.sh.backup test.sh
-    
+
     echo "----------------------------------------"
 done
 
 echo "🎉 完成！成功获取 $success_count/$total_count 个用户的令牌"
 echo ""
-echo "📁 所有令牌已保存到: all-test-tokens.env"
+echo "📁 所有令牌已保存到: $SCRIPT_DIR/all-test-tokens.env"
 echo ""
+
+if [ "$success_count" -gt 0 ]; then
+    echo "========================================"
+    echo "📋 当前所有可用测试 Token（source 即可使用）"
+    echo "========================================"
+    grep '^export ' all-test-tokens.env || true
+    echo ""
+fi
+
 echo "使用方法:"
-echo "  source all-test-tokens.env"
+echo "  source $SCRIPT_DIR/all-test-tokens.env"
 echo "  echo \$HQ_ADMIN_ACCESS_TOKEN"
 echo ""
-echo "或者直接复制上面显示的export命令使用"
+echo "或者直接复制上面显示的 export 命令使用"

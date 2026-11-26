@@ -12,8 +12,9 @@
 
 # 🚨 测试用客户端凭据 - 仅用于开发测试！绝不能暴露到浏览器端！
 # ⚠️  生产环境必须使用安全的客户端凭据管理方式
-CLIENT_ID="ffv-client"
-CLIENT_SECRET="secret"
+# 可用 TEST_CLIENT_ID / TEST_CLIENT_SECRET 覆盖；默认值保持不变
+CLIENT_ID="${TEST_CLIENT_ID:-ffv-client}"
+CLIENT_SECRET="${TEST_CLIENT_SECRET:-secret}"
 CLIENT_CREDENTIALS_B64=$(echo -n "${CLIENT_ID}:${CLIENT_SECRET}" | base64)
 
 # 🔧 测试配置开关
@@ -34,12 +35,15 @@ fi
 echo ""
 
 # 服务器配置
-BASE_URL="http://localhost:9000"
+# 用 TEST_BASE_URL 覆盖可支持 dev.sh 的自定义端口；避免与 shell 内置 BASE_URL 撞名
+BASE_URL="${TEST_BASE_URL:-http://localhost:9000}"
 
 # 用户凭证配置
-USERNAME="store_admin" # admin / user
-PASSWORD="store123"
-NEW_PASSWORD="store123"  # 当需要修改密码时使用的新密码
+# 用 TEST_USERNAME / TEST_PASSWORD / TEST_NEW_PASSWORD 覆盖，
+# 不用 USERNAME / PASSWORD，避免与 shell 环境变量（macOS 默认有 USERNAME）冲突
+USERNAME="${TEST_USERNAME:-store_admin}" # admin / user
+PASSWORD="${TEST_PASSWORD:-store123}"
+NEW_PASSWORD="${TEST_NEW_PASSWORD:-$PASSWORD}"  # 当需要修改密码时使用的新密码
 
 # Base64URL encode function (no padding)
 base64url_encode() {
