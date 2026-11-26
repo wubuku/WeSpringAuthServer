@@ -139,3 +139,6 @@ csrf_token.txt
 test_phone.txt
 .env.prod
 .understand-anything/.understandignore
+
+# WorkBuddy local memory (machine-local, not shared)
+.workbuddy/memory/
